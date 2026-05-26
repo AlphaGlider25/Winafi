@@ -1,0 +1,32 @@
+#ifndef RUFUS_MOUNT_OPS_H
+#define RUFUS_MOUNT_OPS_H
+
+#include <stdint.h>
+
+typedef struct {
+    char fat_mount[256];   // /tmp/rufus-mount-XXXX/fat
+    char ntfs_mount[256];  // /tmp/rufus-mount-XXXX/ntfs
+    char temp_dir[256];    // /tmp/rufus-mount-XXXX
+} mount_context_t;
+
+// Create temporary mount points
+// Returns: 0 on success, negative on error
+int mount_create_temp_dirs(mount_context_t *ctx);
+
+// Mount FAT32 partition
+// device: /dev/sdX1
+// mount_point: /tmp/rufus-mount-XXXX/fat
+int mount_fat32(const char *device, const char *mount_point);
+
+// Mount NTFS partition
+// device: /dev/sdX2
+// mount_point: /tmp/rufus-mount-XXXX/ntfs
+int mount_ntfs(const char *device, const char *mount_point);
+
+// Unmount partition and cleanup
+int unmount_and_cleanup(mount_context_t *ctx);
+
+// Sync filesystem buffers
+int mount_sync(void);
+
+#endif

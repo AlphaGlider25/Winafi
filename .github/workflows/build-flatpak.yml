@@ -1,0 +1,30 @@
+name: Build Flatpak
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: Winafi.flatpak
+          manifest-path: flatpak/com.github.alphaglider25.winafi.yml
+          cache: true
+          cache-key: flatpak-builder-${{ github.ref_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: Winafi.flatpak
+          retention-days: 1

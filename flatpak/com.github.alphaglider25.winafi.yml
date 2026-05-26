@@ -1,0 +1,40 @@
+app-id: com.github.alphaglider25.winafi
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: winafi-gui
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --device=all
+  - --share=network
+
+modules:
+  - name: libparted
+    sources:
+      - type: archive
+        url: https://ftp.gnu.org/gnu/parted/parted-3.5.tar.xz
+        sha256: 4938dd5c1c125f6c78b1f4b3e297526f18ee74aa43d45c248578b1d2470c05a2
+
+  - name: libarchive
+    buildsystem: cmake-ninja
+    sources:
+      - type: archive
+        url: https://github.com/libarchive/libarchive/releases/download/v3.7.2/libarchive-3.7.2.tar.xz
+        sha256: 04357661e6717b6941682cde02ad741ae4819c67a260593dfb2431861b251acb
+
+  - name: winafi
+    buildsystem: cmake-ninja
+    builddir: build
+    sources:
+      - type: git
+        url: https://github.com/AlphaGlider25/Winafi.git
+        branch: main
+        commit: HEAD
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_GUI=ON
+      - -DBUILD_TESTS=OFF

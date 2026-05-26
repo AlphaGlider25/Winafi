@@ -1,0 +1,33 @@
+name: Build AppImage
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            libqt5widgets5 qt5-qmake libqt5core5a \
+            libudev-dev libparted-dev libarchive-dev \
+            libcdio-dev libssl-dev libcurl4-openssl-dev \
+            appstream desktop-file-utils libfuse2 fuse
+
+      - name: Build AppImage
+        run: |
+          bash scripts/build-appimage.sh "${{ github.ref_name }}" x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: "Winafi-*.AppImage*"
+          retention-days: 1

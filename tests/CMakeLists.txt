@@ -1,0 +1,61 @@
+# Unit tests
+add_executable(test_settings unit/test_settings.c)
+target_link_libraries(test_settings PRIVATE winafi-core)
+target_include_directories(test_settings PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_settings COMMAND test_settings)
+
+add_executable(test_net unit/test_net.c ../src/platform/linux/net.c)
+target_link_libraries(test_net PRIVATE winafi-core CURL::libcurl)
+target_include_directories(test_net PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_net COMMAND test_net)
+
+add_executable(test_update unit/test_update.c ../src/platform/linux/update.c ../src/platform/linux/net.c)
+target_link_libraries(test_update PRIVATE winafi-core CURL::libcurl)
+target_include_directories(test_update PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_update PRIVATE _POSIX_C_SOURCE=200809L WINAFI_VERSION="4.0.0")
+add_test(NAME test_update COMMAND test_update)
+
+add_executable(test_proc_utils unit/test_proc_utils.c ../src/platform/linux/proc_utils.c)
+target_link_libraries(test_proc_utils PRIVATE winafi-core)
+target_include_directories(test_proc_utils PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_proc_utils COMMAND test_proc_utils)
+
+add_executable(test_wue unit/test_wue.c ../src/platform/linux/wue.c)
+target_link_libraries(test_wue PRIVATE winafi-core)
+target_include_directories(test_wue PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_wue PRIVATE _POSIX_C_SOURCE=200809L)
+add_test(NAME test_wue COMMAND test_wue)
+
+add_executable(test_wimboot unit/test_wimboot.c ../src/platform/linux/wimboot.c)
+target_link_libraries(test_wimboot PRIVATE winafi-core)
+target_include_directories(test_wimboot PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_wimboot COMMAND test_wimboot)
+
+add_executable(test_localization_linux unit/test_localization_linux.c ../src/platform/linux/localization_linux.c)
+target_link_libraries(test_localization_linux PRIVATE winafi-core)
+target_include_directories(test_localization_linux PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_localization_linux COMMAND test_localization_linux)
+
+add_executable(test_smart unit/test_smart.c ../src/platform/linux/smart.c)
+target_link_libraries(test_smart PRIVATE winafi-core)
+target_include_directories(test_smart PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(LIBATASMART_FOUND)
+    target_compile_definitions(test_smart PRIVATE HAVE_LIBATASMART)
+    target_link_libraries(test_smart PRIVATE ${LIBATASMART_LIBRARIES})
+endif()
+add_test(NAME test_smart COMMAND test_smart)
+
+# SBAT validation test
+add_executable(test_sbat unit/test_sbat.c ../src/platform/linux/sbat.c)
+target_link_libraries(test_sbat PRIVATE winafi-core)
+target_include_directories(test_sbat PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME test_sbat COMMAND test_sbat)
+
+# Dark mode test (requires Qt5)
+if(Qt5_FOUND)
+    add_executable(test_dark_mode unit/test_dark_mode.cpp ../src/gui/dark_mode.cpp)
+    target_link_libraries(test_dark_mode PRIVATE Qt5::Widgets)
+    target_include_directories(test_dark_mode PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    set_property(TARGET test_dark_mode PROPERTY AUTOMOC ON)
+    add_test(NAME test_dark_mode COMMAND test_dark_mode)
+endif()

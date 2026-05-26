@@ -1,0 +1,51 @@
+name: Build Arch Package
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build Arch Package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            base-devel cmake pkg-config \
+            qt5-base qt5-declarative qt5-tools \
+            libarchive parted libcdio \
+            openssl curl systemd
+
+      - name: Build PKGBUILD
+        run: |
+          mkdir -p /tmp/winafi-build
+          cp -r . /tmp/winafi-build
+          cd /tmp/winafi-build/aur
+          sed -i "s/pkgver=.*/pkgver=$(echo ${{ github.ref_name }} | sed 's/v//')/" PKGBUILD
+          sed -i "s/sha256sums=.*/sha256sums=('SKIP')/" PKGBUILD
+
+          # Create non-root user for building (makepkg requires non-root)
+          useradd -m builder || true
+          chown -R builder:builder /tmp/winafi-build
+
+          # Build as non-root user
+          su - builder -c "cd /tmp/winafi-build/aur && makepkg -si --noconfirm --skippgpcheck"
+
+      - name: Copy artifacts
+        run: |
+          mkdir -p artifacts
+          find /tmp/winafi-build/aur -maxdepth 1 -name "*.pkg.tar.zst" -exec cp {} artifacts/ \;
+          ls -lh artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: "artifacts/*.pkg.tar.zst"
+          retention-days: 1

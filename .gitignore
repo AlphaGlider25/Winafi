@@ -1,0 +1,71 @@
+# Build and documentation directories
+build/
+build-new/
+build-appimage/
+docs/
+packaging/
+tests/
+*.a
+*.o
+*.so
+*.so.*
+
+# Test executables in root (temporary test files)
+test_*
+*.plist
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Executables and libraries
+src/winafi
+src/winafi-gui
+tests/test_*
+!tests/unit/
+!tests/gui/
+!tests/integration/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code and development tools
+.claude/
+.superpowers/
+
+# OS and temporary files
+*.tmp
+*.bak
+*.log
+.env
+.env.local
+
+# Test artifacts
+Testing/
+*.gcda
+*.gcno
+coverage/
+
+# Distribution
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+*.AppImage
+
+# Language files
+*.qm
+
+# Qt MOC generated files
+*_autogen/
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
