@@ -398,10 +398,29 @@ int winafi_session_prepare(winafi_session_t *session) {
         return -1;
     }
 
-    // Check device has enough space (ISO size + 100MB overhead)
-    uint64_t required_size = session->iso_info.total_size_bytes + (100 * 1024 * 1024);
-    if (device_capacity < required_size) {
-        log_error("Device too small: %lu < %lu", device_capacity, required_size);
+    // Verify ISO file still exists and get actual current size
+    struct stat st;
+    if (stat(session->iso_path, &st) != 0) {
+        log_error("ISO file no longer accessible: %s", session->iso_path);
+        session_set_error(session, "E-10-A", "Windows ISO file not found");
+        return -1;
+    }
+
+    uint64_t actual_iso_size = (uint64_t)st.st_size;
+
+    // Log both cached and actual sizes for debugging
+    log_info("ISO size check - cached: %lu bytes (%.2f GB), actual: %lu bytes (%.2f GB)",
+             session->iso_info.total_size_bytes,
+             session->iso_info.total_size_bytes / (1024.0 * 1024.0 * 1024.0),
+             actual_iso_size,
+             actual_iso_size / (1024.0 * 1024.0 * 1024.0));
+
+    // Use actual file size for comparison, not cached value
+    if (device_capacity < actual_iso_size) {
+        log_error("Device too small: %lu < %lu (ISO size)", device_capacity, actual_iso_size);
+        log_error("ISO: %.2f GB, Device: %.2f GB",
+                  actual_iso_size / (1024.0 * 1024.0 * 1024.0),
+                  device_capacity / (1024.0 * 1024.0 * 1024.0));
         session_set_error(session, "E-00-C", "USB capacity insufficient");
         return -1;
     }

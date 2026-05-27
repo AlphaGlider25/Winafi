@@ -1,6 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "winafi.h"
 #include <QMainWindow>
 #include <QLabel>
 #include <QLineEdit>
@@ -12,6 +13,7 @@
 #include <QGroupBox>
 #include <QTranslator>
 #include <QPalette>
+#include <QTimer>
 #include <memory>
 
 class WorkerThread;
@@ -25,6 +27,7 @@ public:
 
 private slots:
     void onRefreshDevices();
+    void onAutoRefreshDevices();
     void onBrowseISO();
     void onVerifyISO();
     void onStart();
@@ -44,6 +47,7 @@ private slots:
     void onLanguageChanged(int index);
     void onDarkModeToggled(bool enabled);
     void onCheckForUpdates();
+    void onHideHardDrivesToggled(int state);
 
 private:
     void setupUI();
@@ -54,6 +58,7 @@ private:
     void createStatusSection();
     void createActionButtons();
     void refreshDeviceList();
+    bool isBootableDevice(const winafi_device_t *device);
     void detectISOOptions(const QString &isoPath);
     void loadIsoIntoSession(const QString &isoPath);
     void addImageOptionItem(const QString &text, int optionValue);
@@ -86,6 +91,7 @@ private:
     QPushButton *m_advancedDriveButton;
     QPushButton *m_advancedFormatButton;
     QPushButton *m_verifyHashButton;
+    QCheckBox *m_hideHardDrivesCheck;
 
     // UI Components - Status & Progress
     QLabel *m_statusLabel;
@@ -108,6 +114,10 @@ private:
 
     // Dark mode
     bool m_darkMode;
+
+    // Auto-refresh
+    QTimer *m_autoRefreshTimer;
+    bool m_showHardDrives;  // true = show hard drives, false = hide (default)
 };
 
 #endif // MAINWINDOW_H

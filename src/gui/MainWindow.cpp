@@ -8,6 +8,10 @@
 #include "platform/linux/update.h"
 #include "platform/linux/iso_extract.h"
 #include <cstring>
+#include <unistd.h>
+#include <algorithm>
+#include <cctype>
+#include <string>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
@@ -29,12 +33,23 @@
 #include <QStyle>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), m_session(nullptr), m_worker(nullptr), m_currentISO(""), m_imageOption(0), m_darkMode(false) {
-    // Create session for storing format options
-    m_session = winafi_session_create();
+    : QMainWindow(parent), m_session(nullptr), m_worker(nullptr), m_currentISO(""), m_imageOption(0), m_darkMode(false), m_autoRefreshTimer(nullptr), m_showHardDrives(false) {
     setWindowTitle("Winafi v4.0.0");
     setWindowIcon(QIcon(":/icons/winafi.png"));
     setMinimumWidth(720);
+
+    // Check for root privileges
+    if (geteuid() != 0) {
+        QMessageBox::critical(this, "Insufficient Privileges",
+            "Winafi requires root privileges to write to USB devices.\n\n"
+            "Please run with sudo:\n"
+            "sudo ./winafi-gui");
+        QApplication::quit();
+        return;
+    }
+
+    // Create session for storing format options
+    m_session = winafi_session_create();
 
     QWidget *centralWidget = new QWidget(this);
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
@@ -53,8 +68,14 @@ MainWindow::MainWindow(QWidget *parent)
     // Load dark mode setting
     settings_t *s2 = settings_open();
     m_darkMode = settings_get_bool(s2, "dark_mode", 0) != 0;
+    m_showHardDrives = settings_get_bool(s2, "show_hard_drives", 0) != 0;
     settings_close(s2);
     if (m_darkMode) applyDarkPalette();
+
+    // Setup auto-refresh timer for device list (every 3 seconds)
+    m_autoRefreshTimer = new QTimer(this);
+    connect(m_autoRefreshTimer, &QTimer::timeout, this, &MainWindow::onAutoRefreshDevices);
+    m_autoRefreshTimer->start(3000);
 
     // Restore persisted settings
     settings_t *cfg = settings_open();
@@ -97,6 +118,11 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 MainWindow::~MainWindow() {
+    // Stop auto-refresh timer
+    if (m_autoRefreshTimer) {
+        m_autoRefreshTimer->stop();
+    }
+
     // Persist settings before teardown
     settings_t *cfg = settings_open();
     if (cfg) {
@@ -104,6 +130,7 @@ MainWindow::~MainWindow() {
         settings_set_int(cfg, "partition_scheme", m_partitionSchemeCombo->currentIndex());
         settings_set_int(cfg, "filesystem", m_fileSystemCombo->currentIndex());
         settings_set_bool(cfg, "dark_mode", m_darkMode ? 1 : 0);
+        settings_set_bool(cfg, "show_hard_drives", m_showHardDrives ? 1 : 0);
         if (settings_close(cfg) != 0) {
             // Settings could not be saved — log but don't crash
             appendLog("Warning: could not save settings to disk.");
@@ -143,7 +170,6 @@ void MainWindow::setupUI() {
 
 void MainWindow::createDrivePropertiesSection() {
     QGroupBox *group = new QGroupBox("Drive Properties", this);
-    group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QVBoxLayout *vboxLayout = new QVBoxLayout(group);
     vboxLayout->setSpacing(8);
     vboxLayout->setContentsMargins(10, 16, 10, 10);
@@ -208,6 +234,10 @@ void MainWindow::createDrivePropertiesSection() {
     partRow->addWidget(m_targetSystemCombo, 1);
     formLayout->addRow("Partition scheme:", partRow);
 
+    m_hideHardDrivesCheck = new QCheckBox("Show hard drives");
+    m_hideHardDrivesCheck->setChecked(m_showHardDrives);
+    formLayout->addRow("", m_hideHardDrivesCheck);
+
     vboxLayout->addLayout(formLayout);
 
     QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout *>(this->centralWidget()->layout());
@@ -218,6 +248,8 @@ void MainWindow::createDrivePropertiesSection() {
     connect(m_refreshButton, &QPushButton::clicked, this, &MainWindow::onRefreshDevices);
     connect(m_browseButton, &QPushButton::clicked, this, &MainWindow::onBrowseISO);
     connect(m_verifyButton, &QPushButton::clicked, this, &MainWindow::onVerifyISO);
+    connect(m_hideHardDrivesCheck, QOverload<int>::of(&QCheckBox::stateChanged),
+            this, &MainWindow::onHideHardDrivesToggled);
 
     // Connect partition scheme and target system
     connect(m_partitionSchemeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -524,6 +556,22 @@ void MainWindow::onWriteFinished(bool success, QString errorCode, QString errorM
     enableControls(true);
 }
 
+bool MainWindow::isBootableDevice(const winafi_device_t *device) {
+    if (!device) return false;
+
+    // Show only small USB flash drives (< 250GB)
+    // Hide large hard drives (both internal and external)
+    uint64_t size_gb = device->capacity_bytes / (1024ULL * 1024ULL * 1024ULL);
+
+    if (size_gb > 250) {
+        // Large device - likely a hard drive, hide it
+        return false;
+    }
+
+    // Small device - likely USB flash drive, show it
+    return true;
+}
+
 void MainWindow::refreshDeviceList() {
     m_deviceCombo->clear();
 
@@ -545,7 +593,16 @@ void MainWindow::refreshDeviceList() {
     if (count == 0) {
         m_deviceCombo->addItem("No devices found");
     } else {
+        int added_count = 0;
         for (int i = 0; i < count; i++) {
+            // By default, show only bootable USB flash drives (< 250GB)
+            // Hide all hard drives (internal and external)
+            // When "Show hard drives" is enabled, show everything
+            bool is_bootable = isBootableDevice(&devices[i]);
+            if (!m_showHardDrives && !is_bootable) {
+                continue;
+            }
+
             QString displayText = QString("%1: %2 %3 [%4 GB]")
                 .arg(QString::fromUtf8(devices[i].devnode))
                 .arg(QString::fromUtf8(devices[i].vendor))
@@ -553,6 +610,11 @@ void MainWindow::refreshDeviceList() {
                 .arg(devices[i].capacity_bytes / (1024 * 1024 * 1024));
 
             m_deviceCombo->addItem(displayText, QString::fromUtf8(devices[i].devnode));
+            added_count++;
+        }
+
+        if (added_count == 0) {
+            m_deviceCombo->addItem("No devices found");
         }
     }
 
@@ -942,4 +1004,22 @@ void MainWindow::onDarkModeToggled(bool enabled) {
         settings_set_bool(s, "dark_mode", enabled ? 1 : 0);
         settings_close(s);
     }
+}
+
+void MainWindow::onAutoRefreshDevices() {
+    // Only refresh if no operation is in progress
+    if (m_worker && m_worker->isRunning()) {
+        return;
+    }
+    refreshDeviceList();
+}
+
+void MainWindow::onHideHardDrivesToggled(int state) {
+    m_showHardDrives = (state == Qt::Checked);
+    settings_t *s = settings_open();
+    if (s) {
+        settings_set_bool(s, "show_hard_drives", m_showHardDrives ? 1 : 0);
+        settings_close(s);
+    }
+    refreshDeviceList();
 }

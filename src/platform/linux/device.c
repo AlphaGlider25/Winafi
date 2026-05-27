@@ -311,6 +311,8 @@ int device_enumerate(winafi_device_context_t *ctx,
         strncpy(devinfo->model, model, sizeof(devinfo->model) - 1);
         strncpy(devinfo->serial, serial, sizeof(devinfo->serial) - 1);
 
+        devinfo->is_removable = device_is_usb_device(dev);
+
         idx++;
         udev_device_unref(dev);
     }

@@ -645,6 +645,10 @@ int iso_detect_os(const char *iso_path, iso_info_t *out_info) {
         return ISO_ERR_FILE_NOT_FOUND;
     }
 
+    // Get total ISO size from file stat
+    uint64_t file_size = (uint64_t)st.st_size;
+    fprintf(stderr, "[iso_detect_os] file=%s size=%lu bytes (%.2f GB)\n", iso_path, file_size, file_size / (1024.0 * 1024.0 * 1024.0));
+
     // Open ISO file
     struct archive *a = iso_open_archive(iso_path);
     if (!a) {
@@ -652,8 +656,8 @@ int iso_detect_os(const char *iso_path, iso_info_t *out_info) {
         return ISO_ERR_NOT_ISO;
     }
 
-    // Get total ISO size
-    out_info->total_size_bytes = (uint64_t)st.st_size;
+    // Use file size
+    out_info->total_size_bytes = file_size;
 
     // Scan ISO contents
     int os_type, has_boot, boot_mode;

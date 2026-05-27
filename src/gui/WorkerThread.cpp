@@ -35,6 +35,16 @@ void WorkerThread::run() {
         return;
     }
 
+    // Enumerate devices
+    winafi_device_t *devices = nullptr;
+    int device_count = 0;
+    if (winafi_enumerate_devices(session, &devices, &device_count) != WINAFI_OK) {
+        const char *error = winafi_get_error_message(session);
+        emit finished(false, "DEVICE_SELECT_FAILED", QString::fromUtf8(error));
+        winafi_session_destroy(session);
+        return;
+    }
+
     // Select device
     if (winafi_session_select_device(session, m_devnode.toUtf8().constData()) != WINAFI_OK) {
         const char *error = winafi_get_error_message(session);

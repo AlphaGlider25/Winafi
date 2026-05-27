@@ -22,6 +22,7 @@ typedef struct {
     char vendor[256];
     char model[256];
     char serial[256];
+    int is_removable;  // 1 if USB/removable, 0 if fixed
 } winafi_device_t;
 
 // Session lifecycle
