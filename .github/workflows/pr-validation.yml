@@ -1,0 +1,104 @@
+name: PR Validation
+
+# Enforces the contribution rules in CONTRIBUTING.md:
+#  - branch name must be "{display name}-devbranch"
+#  - "What changed" / "How it helps" present and <= 3 sentences each
+#  - exactly one AI-disclosure box ticked; if "Yes", label the PR "Ai Detected-warning"
+#  - every Contribution-checklist box ticked
+# Build/test validation lives in ci.yml.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate PR metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name, template, and AI disclosure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const branch = pr.head.ref;
+            const body = pr.body || "";
+            const problems = [];
+
+            // 1) Branch name: lower-case, hyphen-separated, ends in -devbranch
+            const branchRe = /^[a-z0-9]+(-[a-z0-9]+)*-devbranch$/;
+            if (!branchRe.test(branch)) {
+              problems.push(
+                `Branch name \`${branch}\` is invalid. It must match ` +
+                "`^[a-z0-9]+(-[a-z0-9]+)*-devbranch$` — e.g. `jane-doe-devbranch`.");
+            }
+
+            // Helper: pull text between BEGIN/END markers, strip HTML comments.
+            function section(tag) {
+              const re = new RegExp(`<!--\\s*BEGIN:${tag}\\s*-->([\\s\\S]*?)<!--\\s*END:${tag}\\s*-->`);
+              const m = body.match(re);
+              if (!m) return null;
+              return m[1].replace(/<!--[\s\S]*?-->/g, "").trim();
+            }
+            function sentenceCount(text) {
+              const parts = text.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+              return parts.length;
+            }
+
+            // 2) "What changed" and 3) "How it helps"
+            for (const [tag, label] of [["WHAT_CHANGED","What changed"],["HOW_IT_HELPS","How it helps"]]) {
+              const txt = section(tag);
+              if (txt === null) { problems.push(`Missing the \`${label}\` section (did you delete a marker?).`); continue; }
+              if (txt.length === 0) { problems.push(`The \`${label}\` section is empty.`); continue; }
+              const n = sentenceCount(txt);
+              if (n === 0) problems.push(`The \`${label}\` section has no sentences.`);
+              if (n > 3) problems.push(`The \`${label}\` section has ${n} sentences (max 3).`);
+            }
+
+            // 4) AI disclosure: exactly one of No/Yes ticked
+            const noTicked  = /- \[x\]\s*\*\*No\*\*/i.test(body);
+            const yesTicked = /- \[x\]\s*\*\*Yes\*\*/i.test(body);
+            if (noTicked && yesTicked) problems.push("Both AI-disclosure boxes are ticked — tick exactly one.");
+            if (!noTicked && !yesTicked) problems.push("No AI-disclosure box is ticked — tick exactly one (No/Yes).");
+
+            // 5) Contribution checklist: no unchecked boxes in that section
+            const clMatch = body.match(/## Contribution checklist([\s\S]*?)(\n## |$)/);
+            if (!clMatch) {
+              problems.push("Missing the `Contribution checklist` section.");
+            } else if (/- \[ \]/.test(clMatch[1])) {
+              problems.push("Unchecked items remain in the Contribution checklist — every box must be `[x]`.");
+            }
+
+            // Apply / remove the AI label.
+            const LABEL = "Ai Detected-warning";
+            if (yesTicked && !noTicked) {
+              try {
+                await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: LABEL });
+              } catch (e) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  name: LABEL, color: "d93f0b",
+                  description: "Contributor disclosed that AI tools were used in this PR." });
+              }
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: pr.number, labels: [LABEL] });
+            } else {
+              // Remove a stale label if the disclosure was changed to "No".
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: pr.number, name: LABEL });
+              } catch (e) { /* label not present — fine */ }
+            }
+
+            if (problems.length) {
+              core.setFailed("PR validation failed:\n- " + problems.join("\n- "));
+            } else {
+              core.notice("PR metadata OK." + (yesTicked ? " (AI usage disclosed — labelled.)" : ""));
+            }

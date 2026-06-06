@@ -1,0 +1,63 @@
+# Build output
+build/
+build-*/
+dist/
+*.o
+*.a
+*.so
+*.so.*
+*_autogen/
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# CMake build artifacts (top-level only; keeps src/cmake CMakeLists and cmake/ modules)
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/Makefile
+
+# Built binaries / stray test executables in the repo root
+/winafi
+/winafi-gui
+/test_*
+*.plist
+
+# Test scratch
+Testing/
+*.gcda
+*.gcno
+coverage/
+
+# Packaging output artifacts
+*.tar.gz
+*.deb
+*.rpm
+*.AppImage
+*.snap
+*.flatpak
+
+# Language compiled files
+*.qm
+
+# IDE / editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and local env
+*.log
+.env
+.env.local
+
+# Local-only assistant and workflow files (never tracked)
+.claude/
+.superpowers/
+.tiv/
+.tiv_ignore
+docs/superpowers/
+CLAUDE.md
+Claude.md

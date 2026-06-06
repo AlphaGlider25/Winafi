@@ -1,0 +1,34 @@
+name: Build Debian Package
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build deb Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config ruby-dev \
+            libqt5widgets5 qt5-qmake libqt5core5a \
+            libudev-dev libparted-dev libarchive-dev \
+            libcdio-dev libssl-dev libcurl4-openssl-dev
+
+      - name: Install FPM
+        run: sudo gem install fpm
+
+      - name: Build Debian package
+        run: bash scripts/build-deb.sh "${{ github.ref_name }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: "winafi_*.deb"
+          retention-days: 1

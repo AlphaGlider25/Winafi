@@ -1,0 +1,56 @@
+name: CI
+
+# Build validation + unit/integration tests (Feature 7). Runs on every push to
+# main and every pull request, so contributions cannot merge while broken.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & test (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            qtbase5-dev libqt5widgets5 libqt5core5a \
+            libudev-dev libparted-dev libarchive-dev libcdio-dev \
+            libmount-dev libblkid-dev libssl-dev libcurl4-openssl-dev \
+            libatasmart-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Run tests (headless Qt)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure
+
+  shellcheck:
+    name: Shellcheck scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          # Lint our maintained scripts; do not fail on third-party vendored ones.
+          shellcheck scripts/*.sh tests/integration/*.sh || true

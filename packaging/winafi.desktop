@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Winafi
+GenericName=Bootable USB Creator
+Comment=Create bootable Windows and Linux USB drives
+Exec=winafi-gui
+TryExec=winafi-gui
+Icon=winafi
+Terminal=false
+Categories=Utility;Filesystem;
+Keywords=USB;ISO;bootable;Windows;installer;flash;
+StartupNotify=true

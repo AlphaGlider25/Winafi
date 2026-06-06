@@ -1,0 +1,63 @@
+name: CI Distros
+
+# Cross-distribution build + test matrix (Feature 8, §3.4). Confirms Winafi
+# compiles and its test suite passes on the Debian, Fedora and Arch families.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu
+            image: ubuntu:latest
+            install: |
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                build-essential cmake pkg-config qtbase5-dev \
+                libudev-dev libparted-dev libarchive-dev libcdio-dev \
+                libmount-dev libblkid-dev libssl-dev libcurl4-openssl-dev \
+                libatasmart-dev
+          - name: Fedora
+            image: fedora:latest
+            install: |
+              dnf -y install gcc gcc-c++ make cmake pkgconf-pkg-config \
+                qt5-qtbase-devel systemd-devel parted-devel libarchive-devel \
+                libcdio-devel libmount-devel libblkid-devel openssl-devel \
+                libcurl-devel libatasmart-devel
+          - name: Arch
+            image: archlinux:latest
+            install: |
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm gcc make cmake pkgconf qt5-base systemd-libs \
+                parted libarchive libcdio util-linux-libs openssl curl libatasmart
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: ${{ matrix.install }}
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test (headless)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure

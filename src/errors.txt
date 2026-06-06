@@ -1,0 +1,64 @@
+# Format: ERROR_CODE | Category | User Message | Details
+# Device & Privilege Errors (E-00 to E-09)
+E-00-A | Device Detection Failed | USB device not found | libudev enumeration returned 0 devices
+E-00-B | Device Not USB | Target device is not USB storage | Device parent subsystem is not 'usb'
+E-00-C | Device Too Small | USB capacity insufficient | Device size < ISO size + 100MB
+E-00-D | Device Read Failed | Cannot read device properties | libudev property access failed
+E-00-E | Device Is System Disk | Cannot format system disk | Device is mounted at /
+E-00-F | Device Mounted | USB is currently mounted | Device has active mount points
+E-00-G | Device Locked | Device is locked by another process | flock() failed, possibly in use
+E-01-A | Device Open Failed | Cannot access USB device | libparted ped_device_get() failed
+E-01-B | Device Readonly | USB device is read-only | Device opened in readonly mode
+E-01-C | Permission Denied | Insufficient privileges | Must run as root (uid 0) or have CAP_SYS_ADMIN
+# ISO Errors (E-10 to E-19)
+E-10-A | ISO Not Found | Windows ISO file not found | File does not exist: %s
+E-10-B | ISO Not Readable | Cannot read ISO file | File permissions or I/O error
+E-10-C | ISO Invalid | Not a valid ISO 9660 image | libarchive failed to open archive
+E-10-D | ISO Not Windows | ISO does not contain Windows | install.wim not found in ISO
+E-10-E | Windows Version Unknown | Unsupported Windows version | install.wim metadata unreadable
+E-10-F | ISO Too Large | Windows ISO exceeds device capacity | ISO size > device capacity
+E-10-G | ISO Extraction Failed | Cannot extract ISO contents | libarchive extraction error
+E-11-A | ISO Metadata Invalid | Cannot read Windows version | WIM header missing or corrupted
+E-11-B | ISO File Count Exceeded | Too many files in ISO | > 50000 files
+# Partition & Mount Errors (E-20 to E-29)
+E-20-A | Partition Table Failed | Cannot create partition table | libparted disk creation failed
+E-20-B | Partition Create Failed | Cannot create partition | ped_disk_add_partition() failed
+E-20-C | Partition Write Failed | Cannot write partition table to disk | ped_disk_commit() failed
+E-20-D | Partition Too Small | Partition size calculation failed | Not enough space for both partitions
+E-20-E | Partition Alignment Failed | Cannot align partitions properly | libparted alignment constraint failed
+E-20-F | Partition Flag Failed | Cannot set boot/esp flags | ped_partition_set_flag() failed
+E-21-A | FAT32 Format Failed | Cannot format FAT32 partition | mkfs.vfat exited with error
+E-21-B | NTFS Format Failed | Cannot format NTFS partition | mkfs.ntfs exited with error
+E-21-C | Format Timeout | Format operation took too long | Exceeded 30 second timeout
+E-21-D | Format Missing Tool | Filesystem tool not installed | mkfs.vfat or mkfs.ntfs not found
+E-22-A | Mount Failed | Cannot mount partition | mount() or libmount failed
+E-22-B | Unmount Failed | Cannot unmount safely | umount() failed, device busy
+E-22-C | Sync Failed | Cannot flush buffers to disk | fsync()/sync() failed
+# File Copy Errors (E-30 to E-39)
+E-30-A | Copy Failed | Cannot copy ISO files to USB | libarchive extraction failed
+E-30-B | Copy Incomplete | Not all files were copied | Copied partial files before error
+E-30-C | Copy Timeout | File copying took too long | Exceeded 300 second timeout
+E-30-D | Disk Full | USB ran out of space during copy | Insufficient space on device
+E-30-E | Permission Denied During Copy | Cannot write to USB partition | No write permission
+E-30-F | Copy Symlink Failed | Cannot follow symlink in ISO | Symlink encountered
+# Bootloader Errors (E-40 to E-49)
+E-40-A | GRUB Install Failed | Cannot install GRUB bootloader | grub-install exited with error
+E-40-B | GRUB Config Failed | Cannot generate GRUB configuration | Config file write failed
+E-40-C | GRUB Missing | grub-install tool not found | grub-install not in PATH
+E-40-D | GRUB Permission Failed | Cannot run grub-install | Requires root privileges
+E-41-A | UEFI Bootloader Missing | UEFI:NTFS bootloader not available | bootx64.efi not bundled
+E-41-B | UEFI Setup Failed | Cannot configure UEFI boot partition | EFI/Boot directory creation failed
+E-41-C | UEFI Config Write Failed | Cannot write UEFI configuration | Failed to write bootx64.efi
+# System Errors (E-50 to E-59)
+E-50-A | Out of Memory | System ran out of memory | malloc() failed
+E-50-B | Temporary Directory Failed | Cannot create temporary directory | mktemp() or mkdir() failed
+E-50-C | Device Sync Failed | Cannot sync filesystem changes | fsync() or ioctl() failed
+E-50-D | Device Unmount Failed | Cannot unmount USB safely | umount() failed
+E-50-E | System Call Failed | Low-level system call failed | ioctl/lseek/read error
+E-50-F | Temp Dir Cleanup Failed | Cannot remove temporary directory | rmdir() failed
+E-51-A | Invalid Parameters | Invalid function parameters | NULL pointer or invalid state
+E-51-B | State Machine Error | Invalid operation sequence | Invalid state transition
+E-51-C | Session Corrupted | Internal session state corrupted | Integrity check failed
+# User Cancellation (E-60 to E-69)
+E-60-A | User Cancelled | Operation cancelled by user | User pressed Ctrl+C or abort
+E-60-B | Confirmation Failed | User did not confirm dangerous operation | User did not type 'YES'

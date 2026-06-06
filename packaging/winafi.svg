@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#g)"/>
+  <!-- USB stick glyph -->
+  <rect x="112" y="44" width="32" height="120" rx="8" fill="#e6e1f5"/>
+  <rect x="100" y="150" width="56" height="60" rx="10" fill="#1c1830"/>
+  <rect x="116" y="60" width="8" height="18" fill="#1c1830"/>
+  <rect x="132" y="60" width="8" height="18" fill="#1c1830"/>
+  <!-- "W" mark -->
+  <path d="M108 168 l8 30 l8 -22 l8 22 l8 -30" fill="none" stroke="#8b5cf6" stroke-width="7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

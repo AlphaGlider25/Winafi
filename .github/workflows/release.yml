@@ -1,0 +1,77 @@
+name: Release - Build All Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    name: Setup Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+  build-appimage:
+    name: Build AppImage
+    needs: setup
+    uses: ./.github/workflows/build-appimage.yml
+    secrets: inherit
+
+  build-deb:
+    name: Build Debian Package
+    needs: setup
+    uses: ./.github/workflows/build-deb.yml
+    secrets: inherit
+
+  build-rpm:
+    name: Build RPM Package
+    needs: setup
+    uses: ./.github/workflows/build-rpm.yml
+    secrets: inherit
+
+  build-flatpak:
+    name: Build Flatpak
+    needs: setup
+    uses: ./.github/workflows/build-flatpak.yml
+    secrets: inherit
+
+  build-snap:
+    name: Build Snap
+    needs: setup
+    uses: ./.github/workflows/build-snap.yml
+    secrets: inherit
+
+  build-arch:
+    name: Build Arch Package
+    needs: setup
+    uses: ./.github/workflows/build-arch.yml
+    secrets: inherit
+
+  publish:
+    name: Publish Release Notes
+    needs: [setup, build-appimage, build-deb, build-rpm, build-flatpak, build-snap, build-arch]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Update Release with artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true

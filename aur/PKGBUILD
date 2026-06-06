@@ -1,0 +1,55 @@
+# Maintainer: AlphaGlider25 <12aa44edsta@gmail.com>
+pkgname=winafi
+pkgver=0.0.5
+pkgrel=1
+pkgdesc="USB bootable drive utility for Linux"
+arch=('x86_64' 'aarch64')
+url="https://github.com/AlphaGlider25/Winafi"
+license=('GPL3')
+depends=(
+    'qt5-base'
+    'libarchive'
+    'libparted'
+    'libcdio'
+    'openssl'
+    'curl'
+    'systemd-libs'
+)
+makedepends=(
+    'cmake'
+    'qt5-tools'
+    'pkg-config'
+)
+_tag="v${pkgver}"
+source=("https://github.com/AlphaGlider25/Winafi/archive/${_tag}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "Winafi-${_tag#v}"
+    mkdir -p build
+    cd build
+    cmake .. \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_GUI=ON \
+        -DBUILD_TESTS=OFF
+    make
+}
+
+package() {
+    cd "Winafi-${_tag#v}/build"
+    make DESTDIR="${pkgdir}" install
+
+    # Install desktop entry
+    mkdir -p "${pkgdir}/usr/share/applications"
+    cat > "${pkgdir}/usr/share/applications/winafi.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Winafi
+Comment=USB bootable drive utility for Linux
+Exec=winafi-gui
+Icon=application-x-executable
+Categories=Utility;System;
+Terminal=false
+EOF
+}
