@@ -17,6 +17,13 @@ Winafi handles the entire process of preparing a USB drive for booting:
 
 ## Quick Start
 
+First clone the git repository
+open a terminal application and type this:
+```bash
+git clone https://github.com/AlphaGlider25/Winafi.git
+cd Winafi
+```
+
 ### Install Dependencies
 
 On Ubuntu or Debian:
@@ -236,11 +243,8 @@ GPLv3.
 
 ## Credits
 
-Winafi is an independent Linux USB boot utility, inspired by Rufus (Pete Batard's Windows USB formatting tool). Winafi is a clean native reimplementation and does not ship any Rufus code.
+Winafi is an independent Linux USB boot utility, inspired by Rufus (Pete Batard's Windows USB formatting tool). Winafi is a clean native reimplementation
 
 ---
 
-**Last Updated:** May 2026
-**Current Phase:** 6 (Feature Complete)
-**Test Status:** 30+ tests passing
-**Build Status:** All targets compile successfully
+**Last Updated:** June 2026
