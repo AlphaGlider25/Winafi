@@ -231,6 +231,6 @@ int winafi_session_set_unattend(winafi_session_t *session, int flags, const char
  * Returns LINUX_SB_UNKNOWN if no ISO is loaded or it is not a Linux ISO.
  * Can be called after winafi_session_load_iso() succeeds.
  */
-linux_sb_status_t winafi_get_linux_sb_status(winafi_session_t *session);
+int winafi_get_linux_sb_status(winafi_session_t *session);
 
 #endif

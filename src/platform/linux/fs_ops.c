@@ -36,10 +36,10 @@ int fs_format_fat32(const char *device, const char *label) {
         // Child process: execute mkfs.vfat with timeout
         // timeout 30 mkfs.vfat -n LABEL /dev/sdX1
         char *argv[] = {
-            "timeout",
-            "30",
-            "mkfs.vfat",
-            "-n",
+            (char *)"timeout",
+            (char *)"30",
+            (char *)"mkfs.vfat",
+            (char *)"-n",
             (char *)actual_label,
             (char *)device,
             NULL
@@ -99,11 +99,11 @@ int fs_format_ntfs(const char *device, const char *label) {
         // Child process: execute mkfs.ntfs with timeout
         // timeout 30 mkfs.ntfs -f -L LABEL /dev/sdX2
         char *argv[] = {
-            "timeout",
-            "30",
-            "mkfs.ntfs",
-            "-f",
-            "-L",
+            (char *)"timeout",
+            (char *)"30",
+            (char *)"mkfs.ntfs",
+            (char *)"-f",
+            (char *)"-L",
             (char *)actual_label,
             (char *)device,
             NULL
@@ -151,7 +151,7 @@ int fs_check_tool_available(const char *tool_name) {
     if (pid == 0) {
         // Child process: execute 'which' to check if tool exists
         char *argv[] = {
-            "which",
+            (char *)"which",
             (char *)tool_name,
             NULL
         };

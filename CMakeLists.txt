@@ -63,8 +63,8 @@ add_compile_options(
     -Wpedantic
     -Wconversion
     -Wshadow
-    -Wstrict-prototypes
     -Wwrite-strings
+    $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>
 )
 
 # Debug vs Release

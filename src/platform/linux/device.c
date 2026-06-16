@@ -1,4 +1,5 @@
 #include "device.h"
+#include "device_validate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -242,8 +243,10 @@ int device_enumerate(winafi_device_context_t *ctx,
             continue;
         }
 
+        const char *devnode = udev_device_get_devnode(dev);
         uint64_t capacity = device_get_capacity(dev);
-        if (capacity > 0) {
+        if (capacity > 0 && devnode &&
+            (device_is_usb_device(dev) || validate_device_is_removable(devnode) == VALIDATE_OK)) {
             count++;
         }
         udev_device_unref(dev);
@@ -257,7 +260,7 @@ int device_enumerate(winafi_device_context_t *ctx,
     }
 
     // Allocate device array
-    *devices = malloc(count * sizeof(**devices));
+    *devices = malloc((size_t)count * sizeof(**devices));
     if (!*devices) {
         fprintf(stderr, "Failed to allocate device array\n");
         udev_enumerate_unref(enumerate);
@@ -280,7 +283,9 @@ int device_enumerate(winafi_device_context_t *ctx,
         }
 
         uint64_t capacity = device_get_capacity(dev);
-        if (capacity == 0) {
+        const char *devnode = udev_device_get_devnode(dev);
+        if (capacity == 0 || !devnode ||
+            (!device_is_usb_device(dev) && validate_device_is_removable(devnode) != VALIDATE_OK)) {
             udev_device_unref(dev);
             continue;
         }
@@ -289,7 +294,6 @@ int device_enumerate(winafi_device_context_t *ctx,
         winafi_device_t *devinfo = &(*devices)[idx];
         memset(devinfo, 0, sizeof(*devinfo));
 
-        const char *devnode = udev_device_get_devnode(dev);
         const char *sysname = udev_device_get_sysname(dev);
 
         if (devnode) {
@@ -388,6 +392,8 @@ int device_get_info(winafi_device_context_t *ctx,
     strncpy(out_device->vendor, vendor, sizeof(out_device->vendor) - 1);
     strncpy(out_device->model, model, sizeof(out_device->model) - 1);
     strncpy(out_device->serial, serial, sizeof(out_device->serial) - 1);
+    out_device->is_removable =
+        (device_is_usb_device(dev) || validate_device_is_removable(devnode) == VALIDATE_OK) ? 1 : 0;
 
     udev_device_unref(dev);
     return 0;
@@ -407,6 +413,11 @@ int device_validate(const char *devnode) {
         return WINAFI_DEVICE_ERROR_INVALID;
     }
 
+    if (validate_device_is_removable(devnode) != VALIDATE_OK) {
+        fprintf(stderr, "Device %s is not removable/USB\n", devnode);
+        return WINAFI_DEVICE_ERROR_INVALID;
+    }
+
     // Check if device is mounted
     if (device_is_mounted(devnode)) {
         fprintf(stderr, "Device %s is mounted\n", devnode);
@@ -416,6 +427,16 @@ int device_validate(const char *devnode) {
     // Check if system disk
     if (device_is_system_disk(devnode)) {
         fprintf(stderr, "Device %s appears to be system disk\n", devnode);
+        return WINAFI_DEVICE_ERROR_INVALID;
+    }
+
+    if (validate_not_system_drive(devnode) == VALIDATE_ERR_SYSTEM_DRIVE) {
+        fprintf(stderr, "Device %s contains a protected system mount\n", devnode);
+        return WINAFI_DEVICE_ERROR_INVALID;
+    }
+
+    if (geteuid() == 0 && validate_device_not_locked(devnode) != VALIDATE_OK) {
+        fprintf(stderr, "Device %s is locked or busy\n", devnode);
         return WINAFI_DEVICE_ERROR_INVALID;
     }
 

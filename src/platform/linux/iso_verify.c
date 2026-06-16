@@ -1,12 +1,29 @@
 #include "iso_verify.h"
-#include <openssl/md5.h>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
 
 #define HASH_BLOCK_SIZE (64 * 1024)  // 64KB chunks for efficiency
+
+static const EVP_MD *hash_evp_md(hash_type_t type) {
+    switch (type) {
+        case HASH_MD5: return EVP_md5();
+        case HASH_SHA256: return EVP_sha256();
+        case HASH_SHA512: return EVP_sha512();
+        default: return NULL;
+    }
+}
+
+static size_t hash_digest_length(hash_type_t type) {
+    switch (type) {
+        case HASH_MD5: return 16;
+        case HASH_SHA256: return 32;
+        case HASH_SHA512: return 64;
+        default: return 0;
+    }
+}
 
 /**
  * Compute hash of ISO file.
@@ -33,72 +50,70 @@ int iso_compute_hash(const char *iso_path, hash_type_t type,
     }
 
     result->type = type;
-    unsigned char digest[SHA512_DIGEST_LENGTH];
+    const EVP_MD *md = hash_evp_md(type);
+    size_t digest_len = hash_digest_length(type);
+    if (!md || digest_len == 0) {
+        fclose(f);
+        return -1;
+    }
+
+    unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned char buffer[HASH_BLOCK_SIZE];
     size_t bytes;
     uint64_t current = 0;
 
     // Get file size for progress calculation
-    fseek(f, 0, SEEK_END);
-    uint64_t file_size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
+    long end_pos = ftell(f);
+    if (end_pos < 0 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
+    uint64_t file_size = (uint64_t)end_pos;
 
-    switch (type) {
-        case HASH_MD5: {
-            MD5_CTX ctx;
-            MD5_Init(&ctx);
-            while ((bytes = fread(buffer, 1, HASH_BLOCK_SIZE, f)) > 0) {
-                MD5_Update(&ctx, buffer, bytes);
-                current += bytes;
-                if (progress_cb) {
-                    int percent = (file_size > 0) ? (int)(current * 100 / file_size) : 0;
-                    progress_cb(percent, user_data);
-                }
-            }
-            MD5_Final(digest, &ctx);
-            for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-                sprintf(&result->hash_string[i*2], "%02x", digest[i]);
-            }
-            break;
-        }
-        case HASH_SHA256: {
-            SHA256_CTX ctx;
-            SHA256_Init(&ctx);
-            while ((bytes = fread(buffer, 1, HASH_BLOCK_SIZE, f)) > 0) {
-                SHA256_Update(&ctx, buffer, bytes);
-                current += bytes;
-                if (progress_cb) {
-                    int percent = (file_size > 0) ? (int)(current * 100 / file_size) : 0;
-                    progress_cb(percent, user_data);
-                }
-            }
-            SHA256_Final(digest, &ctx);
-            for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-                sprintf(&result->hash_string[i*2], "%02x", digest[i]);
-            }
-            break;
-        }
-        case HASH_SHA512: {
-            SHA512_CTX ctx;
-            SHA512_Init(&ctx);
-            while ((bytes = fread(buffer, 1, HASH_BLOCK_SIZE, f)) > 0) {
-                SHA512_Update(&ctx, buffer, bytes);
-                current += bytes;
-                if (progress_cb) {
-                    int percent = (file_size > 0) ? (int)(current * 100 / file_size) : 0;
-                    progress_cb(percent, user_data);
-                }
-            }
-            SHA512_Final(digest, &ctx);
-            for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
-                sprintf(&result->hash_string[i*2], "%02x", digest[i]);
-            }
-            break;
-        }
-        default:
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        fclose(f);
+        return -1;
+    }
+    if (EVP_DigestInit_ex(ctx, md, NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        fclose(f);
+        return -1;
+    }
+
+    while ((bytes = fread(buffer, 1, HASH_BLOCK_SIZE, f)) > 0) {
+        if (EVP_DigestUpdate(ctx, buffer, bytes) != 1) {
+            EVP_MD_CTX_free(ctx);
             fclose(f);
             return -1;
+        }
+        current += (uint64_t)bytes;
+        if (progress_cb) {
+            int percent = (file_size > 0) ? (int)(current * 100 / file_size) : 0;
+            progress_cb(percent, user_data);
+        }
     }
+    if (ferror(f)) {
+        EVP_MD_CTX_free(ctx);
+        fclose(f);
+        return -1;
+    }
+    unsigned int out_len = 0;
+    if (EVP_DigestFinal_ex(ctx, digest, &out_len) != 1 || out_len != digest_len) {
+        EVP_MD_CTX_free(ctx);
+        fclose(f);
+        return -1;
+    }
+    EVP_MD_CTX_free(ctx);
+
+    for (size_t i = 0; i < digest_len; i++) {
+        sprintf(&result->hash_string[i * 2], "%02x", digest[i]);
+    }
+    result->hash_string[digest_len * 2] = '\0';
 
     fclose(f);
     result->verified = -1;  // not yet verified

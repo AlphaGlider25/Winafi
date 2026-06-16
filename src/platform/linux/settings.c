@@ -45,10 +45,8 @@ static void load(settings_t *s) {
         *eq = '\0';
         char *key = line, *val = eq + 1;
         val[strcspn(val, "\r\n")] = '\0';
-        strncpy(s->entries[s->count].key, key, MAX_KEY_LEN - 1);
-        s->entries[s->count].key[MAX_KEY_LEN - 1] = '\0';
-        strncpy(s->entries[s->count].val, val, MAX_VAL_LEN - 1);
-        s->entries[s->count].val[MAX_VAL_LEN - 1] = '\0';
+        snprintf(s->entries[s->count].key, MAX_KEY_LEN, "%.*s", MAX_KEY_LEN - 1, key);
+        snprintf(s->entries[s->count].val, MAX_VAL_LEN, "%.*s", MAX_VAL_LEN - 1, val);
         s->count++;
     }
     fclose(f);

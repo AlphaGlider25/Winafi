@@ -64,6 +64,7 @@ int winafi_enumerate_devices(winafi_session_t *session,
 // ISO loading and detection
 int winafi_session_load_iso(winafi_session_t *session, const char *iso_path);
 const char *winafi_get_detected_os(winafi_session_t *session);
+int winafi_get_linux_sb_status(winafi_session_t *session);
 winafi_image_option_t winafi_get_image_option(winafi_session_t *session);
 int winafi_session_set_image_option(winafi_session_t *session, winafi_image_option_t option);
 

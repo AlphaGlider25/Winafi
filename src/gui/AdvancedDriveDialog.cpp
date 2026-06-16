@@ -19,7 +19,7 @@ AdvancedDriveDialog::AdvancedDriveDialog(winafi_session_t *session, QWidget *par
         int enabled = winafi_session_get_bad_blocks_enabled(session_);
         int passes = winafi_session_get_bad_blocks_passes(session_);
 
-        bad_blocks_check_->setChecked(enabled ? Qt::Checked : Qt::Unchecked);
+        bad_blocks_check_->setChecked(enabled != 0);
         passes_spin_->setValue(passes);
     }
 

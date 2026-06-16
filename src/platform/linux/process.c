@@ -47,7 +47,7 @@ static int is_numeric(const char *str)
  */
 static int pid_has_device_open(const char *pid_str, const char *resolved_dev)
 {
-    char fd_dir[64];
+    char fd_dir[PATH_MAX];
     snprintf(fd_dir, sizeof(fd_dir), "/proc/%s/fd", pid_str);
 
     DIR *fd_dp = opendir(fd_dir);
@@ -62,8 +62,10 @@ static int pid_has_device_open(const char *pid_str, const char *resolved_dev)
         if (fde->d_name[0] == '.')
             continue;
 
-        char fd_path[128];
-        snprintf(fd_path, sizeof(fd_path), "%s/%s", fd_dir, fde->d_name);
+        char fd_path[PATH_MAX];
+        if (snprintf(fd_path, sizeof(fd_path), "%s/%s", fd_dir, fde->d_name) < 0) {
+            continue;
+        }
 
         char link_target[PATH_MAX];
         ssize_t len = readlink(fd_path, link_target, sizeof(link_target) - 1);
@@ -87,8 +89,10 @@ static int pid_has_device_open(const char *pid_str, const char *resolved_dev)
  */
 static int read_comm(const char *pid_str, char *buf, size_t bufsz)
 {
-    char comm_path[64];
-    snprintf(comm_path, sizeof(comm_path), "/proc/%s/comm", pid_str);
+    char comm_path[PATH_MAX];
+    if (snprintf(comm_path, sizeof(comm_path), "/proc/%s/comm", pid_str) < 0) {
+        return 0;
+    }
 
     FILE *f = fopen(comm_path, "r");
     if (!f)
@@ -174,7 +178,7 @@ int process_list_users(const char *devnode, char out[][256], int max_out)
         /* Process has device open — get its name */
         char comm[256] = {0};
         if (!read_comm(de->d_name, comm, sizeof(comm)))
-            snprintf(comm, sizeof(comm), "pid:%s", de->d_name);
+            snprintf(comm, sizeof(comm), "pid:%.251s", de->d_name);
 
         /* Avoid duplicate names */
         int dup = 0;
@@ -187,8 +191,7 @@ int process_list_users(const char *devnode, char out[][256], int max_out)
         if (!dup) {
             if (count >= max_out)
                 break;
-            strncpy(out[count], comm, 255);
-            out[count][255] = '\0';
+            snprintf(out[count], 256, "%s", comm);
             count++;
         }
     }

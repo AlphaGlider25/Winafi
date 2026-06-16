@@ -154,19 +154,6 @@ static int copy_file(const char *src_path, const char *dest_path) {
 }
 
 /**
- * Helper: Check if boot_info has any boot files specified
- */
-static int boot_info_has_files(const windows_boot_info_t *boot_info) {
-    if (!boot_info) return 0;
-
-    return boot_info->bootmgr_path ||
-           boot_info->bcd_path ||
-           boot_info->bootx64_path ||
-           boot_info->bootia32_path ||
-           boot_info->bootaa64_path;
-}
-
-/**
  * Setup UEFI boot environment
  */
 static int setup_uefi_boot(const char *mount_point,
@@ -194,7 +181,10 @@ static int setup_uefi_boot(const char *mount_point,
 
     // Create EFI/BOOT directory (only if source file exists)
     char efi_boot_dir[PATH_MAX];
-    snprintf(efi_boot_dir, sizeof(efi_boot_dir), "%s/EFI/BOOT", mount_point);
+    if (snprintf(efi_boot_dir, sizeof(efi_boot_dir), "%s/EFI/BOOT", mount_point) < 0 ||
+        strlen(mount_point) + strlen("/EFI/BOOT") >= sizeof(efi_boot_dir)) {
+        return ISO_ERR_EXTRACT_FAILED;
+    }
     if (create_dir_if_needed(efi_boot_dir) != 0) {
         fprintf(stderr, "ERROR: Failed to create EFI/BOOT directory\n");
         return ISO_ERR_EXTRACT_FAILED;
@@ -202,7 +192,10 @@ static int setup_uefi_boot(const char *mount_point,
 
     // Copy BOOTX64.EFI
     char dest_bootx64[PATH_MAX];
-    snprintf(dest_bootx64, sizeof(dest_bootx64), "%s/BOOTX64.EFI", efi_boot_dir);
+    if (snprintf(dest_bootx64, sizeof(dest_bootx64), "%s/BOOTX64.EFI", efi_boot_dir) < 0 ||
+        strlen(efi_boot_dir) + strlen("/BOOTX64.EFI") >= sizeof(dest_bootx64)) {
+        return ISO_ERR_EXTRACT_FAILED;
+    }
     if (copy_file(boot_info->bootx64_path, dest_bootx64) != 0) {
         fprintf(stderr, "ERROR: Failed to copy BOOTX64.EFI (disk full, permission denied, or I/O error)\n");
         return ISO_ERR_EXTRACT_FAILED;
@@ -226,7 +219,10 @@ static int setup_uefi_boot(const char *mount_point,
     // Copy BOOTIA32.EFI if present
     if (boot_info->bootia32_path) {
         char dest_bootia32[PATH_MAX];
-        snprintf(dest_bootia32, sizeof(dest_bootia32), "%s/BOOTIA32.EFI", efi_boot_dir);
+        if (snprintf(dest_bootia32, sizeof(dest_bootia32), "%s/BOOTIA32.EFI", efi_boot_dir) < 0 ||
+            strlen(efi_boot_dir) + strlen("/BOOTIA32.EFI") >= sizeof(dest_bootia32)) {
+            return ISO_ERR_EXTRACT_FAILED;
+        }
         if (copy_file(boot_info->bootia32_path, dest_bootia32) != 0) {
             fprintf(stderr, "Warning: Failed to copy BOOTIA32.EFI (optional)\n");
         } else if (progress_cb) {
@@ -237,7 +233,10 @@ static int setup_uefi_boot(const char *mount_point,
     // Copy BOOTAA64.EFI if present
     if (boot_info->bootaa64_path) {
         char dest_bootaa64[PATH_MAX];
-        snprintf(dest_bootaa64, sizeof(dest_bootaa64), "%s/BOOTAA64.EFI", efi_boot_dir);
+        if (snprintf(dest_bootaa64, sizeof(dest_bootaa64), "%s/BOOTAA64.EFI", efi_boot_dir) < 0 ||
+            strlen(efi_boot_dir) + strlen("/BOOTAA64.EFI") >= sizeof(dest_bootaa64)) {
+            return ISO_ERR_EXTRACT_FAILED;
+        }
         if (copy_file(boot_info->bootaa64_path, dest_bootaa64) != 0) {
             fprintf(stderr, "Warning: Failed to copy BOOTAA64.EFI (optional)\n");
         } else if (progress_cb) {
@@ -268,7 +267,10 @@ static int setup_bios_boot(const char *mount_point,
 
     // Copy bootmgr to root of partition
     char dest_bootmgr[PATH_MAX];
-    snprintf(dest_bootmgr, sizeof(dest_bootmgr), "%s/bootmgr", mount_point);
+    if (snprintf(dest_bootmgr, sizeof(dest_bootmgr), "%s/bootmgr", mount_point) < 0 ||
+        strlen(mount_point) + strlen("/bootmgr") >= sizeof(dest_bootmgr)) {
+        return ISO_ERR_EXTRACT_FAILED;
+    }
     struct stat _bm_st;
     if (stat(boot_info->bootmgr_path, &_bm_st) != 0) {
         fprintf(stderr, "ERROR: Source file not found: %s (errno: %d)\n",
@@ -285,7 +287,10 @@ static int setup_bios_boot(const char *mount_point,
 
     // Create Boot directory (note: Windows uses backslash, we use forward slash on Linux)
     char boot_dir[PATH_MAX];
-    snprintf(boot_dir, sizeof(boot_dir), "%s/Boot", mount_point);
+    if (snprintf(boot_dir, sizeof(boot_dir), "%s/Boot", mount_point) < 0 ||
+        strlen(mount_point) + strlen("/Boot") >= sizeof(boot_dir)) {
+        return ISO_ERR_EXTRACT_FAILED;
+    }
     if (create_dir_if_needed(boot_dir) != 0) {
         fprintf(stderr, "ERROR: Failed to create Boot directory\n");
         return ISO_ERR_EXTRACT_FAILED;
@@ -293,7 +298,10 @@ static int setup_bios_boot(const char *mount_point,
 
     // Copy BCD file to Boot/BCD
     char dest_bcd[PATH_MAX];
-    snprintf(dest_bcd, sizeof(dest_bcd), "%s/BCD", boot_dir);
+    if (snprintf(dest_bcd, sizeof(dest_bcd), "%s/BCD", boot_dir) < 0 ||
+        strlen(boot_dir) + strlen("/BCD") >= sizeof(dest_bcd)) {
+        return ISO_ERR_EXTRACT_FAILED;
+    }
     struct stat _bcd_st;
     if (stat(boot_info->bcd_path, &_bcd_st) != 0) {
         fprintf(stderr, "ERROR: Source file not found: %s (errno: %d)\n",

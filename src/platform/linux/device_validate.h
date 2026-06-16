@@ -68,4 +68,13 @@ int validate_not_system_drive(const char *devnode);
  */
 int validate_device_not_locked(const char *devnode);
 
+/**
+ * validate_device_is_removable - Check if a block device is removable/USB.
+ * @devnode: Whole-disk device path (e.g. "/dev/sdb", "/dev/nvme0n1")
+ *
+ * Returns VALIDATE_OK if the kernel/udev marks the device as removable or USB,
+ * VALIDATE_ERR_SYSTEM_DRIVE otherwise.
+ */
+int validate_device_is_removable(const char *devnode);
+
 #endif // WINAFI_DEVICE_VALIDATE_H

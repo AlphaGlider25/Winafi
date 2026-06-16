@@ -9,16 +9,31 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <sys/wait.h>
+
+extern char **environ;
 
 int bootloader_setup_grub_bios(const char *device) {
     if (!device) return -1;
 
-    // Call grub-install to set up MBR bootloader
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "grub-install --target=i386-pc --no-floppy %s 2>/dev/null", device);
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        char *argv[] = {
+            (char *)"grub-install",
+            (char *)"--target=i386-pc",
+            (char *)"--no-floppy",
+            (char *)device,
+            NULL
+        };
+        execve("/usr/bin/grub-install", argv, environ);
+        execve("/bin/grub-install", argv, environ);
+        _exit(127);
+    }
 
-    int ret = system(cmd);
-    if (ret != 0) {
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0 ||
+        !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         return -1;  // E-40-A
     }
 
@@ -54,7 +69,10 @@ int bootloader_setup_uefi_ntfs(const char *fat_mount) {
     if (!fat_mount) return -1;
 
     char efi_dir[PATH_MAX];
-    snprintf(efi_dir, sizeof(efi_dir), "%s/EFI/BOOT", fat_mount);
+    if (snprintf(efi_dir, sizeof(efi_dir), "%s/EFI/BOOT", fat_mount) < 0 ||
+        strlen(fat_mount) + strlen("/EFI/BOOT") >= sizeof(efi_dir)) {
+        return -1;
+    }
     if (mkdir_p(efi_dir) != 0) return -1;
 
     char asset[PATH_MAX];
@@ -64,7 +82,10 @@ int bootloader_setup_uefi_ntfs(const char *fat_mount) {
     }
 
     char dst[PATH_MAX];
-    snprintf(dst, sizeof(dst), "%s/BOOTX64.EFI", efi_dir);
+    if (snprintf(dst, sizeof(dst), "%s/BOOTX64.EFI", efi_dir) < 0 ||
+        strlen(efi_dir) + strlen("/BOOTX64.EFI") >= sizeof(dst)) {
+        return -1;
+    }
     if (boot_copy_file(asset, dst) != 0) {
         fprintf(stderr, "ERROR: failed to install UEFI:NTFS loader to ESP\n");
         return -1;                                  // E-41-A

@@ -6,6 +6,24 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
+#include <sys/wait.h>
+
+extern char **environ;
+
+static int run_mount(char *const argv[]) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execve("/usr/bin/mount", argv, environ);
+        execve("/bin/mount", argv, environ);
+        _exit(127);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return -1;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return -1;
+    return 0;
+}
 
 int mount_create_temp_dirs(mount_context_t *ctx) {
     if (!ctx) return -1;
@@ -21,8 +39,16 @@ int mount_create_temp_dirs(mount_context_t *ctx) {
     ctx->temp_dir[255] = '\0';
 
     // Create subdirectories
-    snprintf(ctx->fat_mount, 255, "%s/fat", ctx->temp_dir);
-    snprintf(ctx->ntfs_mount, 255, "%s/ntfs", ctx->temp_dir);
+    if (snprintf(ctx->fat_mount, sizeof(ctx->fat_mount), "%s/fat", ctx->temp_dir) < 0 ||
+        strlen(ctx->temp_dir) + strlen("/fat") >= sizeof(ctx->fat_mount)) {
+        rmdir(ctx->temp_dir);
+        return -1;
+    }
+    if (snprintf(ctx->ntfs_mount, sizeof(ctx->ntfs_mount), "%s/ntfs", ctx->temp_dir) < 0 ||
+        strlen(ctx->temp_dir) + strlen("/ntfs") >= sizeof(ctx->ntfs_mount)) {
+        rmdir(ctx->temp_dir);
+        return -1;
+    }
 
     if (mkdir(ctx->fat_mount, 0700) != 0) {
         rmdir(ctx->temp_dir);
@@ -40,13 +66,12 @@ int mount_create_temp_dirs(mount_context_t *ctx) {
 int mount_fat32(const char *device, const char *mount_point) {
     if (!device || !mount_point) return -1;
 
-    // Use system mount command with appropriate FAT32 options
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd),
-        "mount -t vfat -o uid=0,gid=0,umask=0,fmask=0111,flush %s %s 2>/dev/null",
-        device, mount_point);
-
-    if (system(cmd) != 0) {
+    char *argv[] = {
+        (char *)"mount", (char *)"-t", (char *)"vfat", (char *)"-o",
+        (char *)"uid=0,gid=0,umask=0,fmask=0111,flush",
+        (char *)device, (char *)mount_point, NULL
+    };
+    if (run_mount(argv) != 0) {
         return -1;  // E-22-A
     }
 
@@ -56,22 +81,21 @@ int mount_fat32(const char *device, const char *mount_point) {
 int mount_ntfs(const char *device, const char *mount_point) {
     if (!device || !mount_point) return -1;
 
-    // Try ntfs3 (modern kernel) first via system mount
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd),
-        "mount -t ntfs3 -o uid=0,gid=0,umask=0,fmask=0111,flush %s %s 2>/dev/null",
-        device, mount_point);
-
-    if (system(cmd) == 0) {
+    char *ntfs3_argv[] = {
+        (char *)"mount", (char *)"-t", (char *)"ntfs3", (char *)"-o",
+        (char *)"uid=0,gid=0,umask=0,fmask=0111,flush",
+        (char *)device, (char *)mount_point, NULL
+    };
+    if (run_mount(ntfs3_argv) == 0) {
         return 0;
     }
 
-    // Fall back to ntfs-3g with alternative options
-    snprintf(cmd, sizeof(cmd),
-        "mount -t ntfs -o uid=0,gid=0,umask=0 %s %s 2>/dev/null",
-        device, mount_point);
-
-    if (system(cmd) != 0) {
+    char *ntfs_argv[] = {
+        (char *)"mount", (char *)"-t", (char *)"ntfs", (char *)"-o",
+        (char *)"uid=0,gid=0,umask=0",
+        (char *)device, (char *)mount_point, NULL
+    };
+    if (run_mount(ntfs_argv) != 0) {
         return -1;  // E-22-A
     }
 

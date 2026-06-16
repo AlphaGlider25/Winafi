@@ -120,7 +120,7 @@ void MainWindow::onRefreshDevices() {
             if (!removable && !m_target->showHardDrives()) continue;
             QString label = QString("%1  (%2 GB)")
                 .arg(QString::fromUtf8(devs[i].devnode))
-                .arg(devs[i].capacity_bytes / (1024.0*1024.0*1024.0), 0, 'f', 1);
+                .arg(static_cast<double>(devs[i].capacity_bytes) / (1024.0*1024.0*1024.0), 0, 'f', 1);
             m_target->addDevice(label, QString::fromUtf8(devs[i].devnode));
         }
     }
@@ -220,7 +220,7 @@ void MainWindow::onProgress(int percent, QString message) {
     m_progress->setValue(percent);
     if (percent > 0 && m_timer) {
         qint64 elapsed = m_timer->elapsed();
-        qint64 total = (qint64)(elapsed * 100.0 / percent);
+        qint64 total = static_cast<qint64>(static_cast<double>(elapsed) * 100.0 / percent);
         qint64 left = (total - elapsed) / 1000;
         m_etaLabel->setText(tr("~%1:%2 left").arg(left/60).arg(left%60, 2, 10, QChar('0')));
     }

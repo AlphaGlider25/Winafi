@@ -1,10 +1,146 @@
+#define _DEFAULT_SOURCE
 #include "device_validate.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <limits.h>
+#include <linux/limits.h>
+
+static int read_first_line(const char *path, char *buf, size_t bufsz)
+{
+    FILE *fp = fopen(path, "r");
+    if (!fp) return -1;
+    if (!fgets(buf, (int)bufsz, fp)) {
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '\n') buf[len - 1] = '\0';
+    return 0;
+}
+
+static int devnode_to_sysname(const char *devnode, char *sysname, size_t sysname_size)
+{
+    if (!devnode || !sysname || sysname_size == 0) return -1;
+    struct stat st;
+    if (stat(devnode, &st) != 0 || !S_ISBLK(st.st_mode)) return -1;
+
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/sys/dev/block/%u:%u",
+             major(st.st_rdev), minor(st.st_rdev));
+
+    char resolved[PATH_MAX];
+    if (!realpath(path, resolved)) return -1;
+    const char *base = strrchr(resolved, '/');
+    if (!base || !base[1]) return -1;
+    snprintf(sysname, sysname_size, "%s", base + 1);
+    return 0;
+}
+
+static int read_removable_flag(const char *sysname)
+{
+    char path[PATH_MAX], value[32];
+    snprintf(path, sizeof(path), "/sys/block/%s/removable", sysname);
+    if (read_first_line(path, value, sizeof(value)) != 0) return 0;
+    return strcmp(value, "1") == 0;
+}
+
+static int has_usb_ancestor(const char *sysname)
+{
+    char path[PATH_MAX], resolved[PATH_MAX];
+    snprintf(path, sizeof(path), "/sys/block/%s", sysname);
+    if (!realpath(path, resolved)) return 0;
+    return strstr(resolved, "/usb") != NULL;
+}
+
+static int mount_entry_matches_dev(const char *mnt_fsname, dev_t dev)
+{
+    struct stat st;
+    if (!mnt_fsname || stat(mnt_fsname, &st) != 0 || !S_ISBLK(st.st_mode)) {
+        return 0;
+    }
+    return st.st_rdev == dev;
+}
+
+static int is_protected_mountpoint(const char *mountpoint)
+{
+    const char *protected_mounts[] = { "/", "/boot", "/home", "/var", "/usr" };
+    for (size_t i = 0; i < sizeof(protected_mounts) / sizeof(protected_mounts[0]); i++) {
+        if (strcmp(mountpoint, protected_mounts[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+static int child_partition_mounted_at_protected(const char *devnode)
+{
+    char sysname[64];
+    if (devnode_to_sysname(devnode, sysname, sizeof(sysname)) != 0) {
+        return VALIDATE_ERR_NOT_FOUND;
+    }
+
+    struct stat st;
+    if (stat(devnode, &st) != 0 || !S_ISBLK(st.st_mode)) {
+        return VALIDATE_ERR_NOT_FOUND;
+    }
+
+    char block_dir[PATH_MAX];
+    snprintf(block_dir, sizeof(block_dir), "/sys/block/%s", sysname);
+
+    dev_t devs[128];
+    int dev_count = 0;
+    devs[dev_count++] = st.st_rdev;
+
+    DIR *dp = opendir(block_dir);
+    if (dp) {
+        struct dirent *de;
+        while ((de = readdir(dp)) != NULL && dev_count < 128) {
+            if (de->d_name[0] == '.') continue;
+            char part_dev[PATH_MAX], part_path[PATH_MAX];
+            if (snprintf(part_path, sizeof(part_path), "%s/%s/partition",
+                         block_dir, de->d_name) < 0 ||
+                strlen(block_dir) + 1 + strlen(de->d_name) + strlen("/partition") >= sizeof(part_path)) {
+                continue;
+            }
+            if (access(part_path, F_OK) != 0) continue;
+            if (snprintf(part_dev, sizeof(part_dev), "/dev/%s", de->d_name) < 0 ||
+                strlen("/dev/") + strlen(de->d_name) >= sizeof(part_dev)) {
+                continue;
+            }
+            if (stat(part_dev, &st) == 0 && S_ISBLK(st.st_mode)) {
+                devs[dev_count++] = st.st_rdev;
+            }
+        }
+        closedir(dp);
+    }
+
+    const char *tables[] = { "/etc/mtab", "/proc/mounts" };
+    for (size_t t = 0; t < sizeof(tables) / sizeof(tables[0]); t++) {
+        FILE *fp = fopen(tables[t], "r");
+        if (!fp) continue;
+        struct mntent *entry;
+        while ((entry = getmntent(fp)) != NULL) {
+            for (int i = 0; i < dev_count; i++) {
+                if (mount_entry_matches_dev(entry->mnt_fsname, devs[i]) &&
+                    is_protected_mountpoint(entry->mnt_dir)) {
+                    fclose(fp);
+                    return VALIDATE_ERR_SYSTEM_DRIVE;
+                }
+            }
+        }
+        fclose(fp);
+    }
+
+    return VALIDATE_OK;
+}
 
 /**
  * System Drive Protection Strategy
@@ -76,6 +212,11 @@ int validate_not_system_drive(const char *devnode)
 {
     if (!devnode) {
         return VALIDATE_ERR_NOT_FOUND;
+    }
+
+    int child_check = child_partition_mounted_at_protected(devnode);
+    if (child_check == VALIDATE_ERR_SYSTEM_DRIVE) {
+        return child_check;
     }
 
     // Protected mountpoints that should never be formatted
@@ -174,4 +315,16 @@ int validate_device_not_locked(const char *devnode)
 
     // For other errors (EACCES, etc.), treat as locked to be safe
     return VALIDATE_ERR_DEVICE_LOCKED;
+}
+
+int validate_device_is_removable(const char *devnode)
+{
+    char sysname[64];
+    if (devnode_to_sysname(devnode, sysname, sizeof(sysname)) != 0) {
+        return VALIDATE_ERR_NOT_FOUND;
+    }
+    if (read_removable_flag(sysname) || has_usb_ancestor(sysname)) {
+        return VALIDATE_OK;
+    }
+    return VALIDATE_ERR_SYSTEM_DRIVE;
 }

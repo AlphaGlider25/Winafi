@@ -35,13 +35,13 @@ static int parse_lines(const char *content) {
 
         size_t klen = (size_t)(eq - p);
         if (klen >= MAX_KEY) { while (*p && *p != '\n') p++; continue; }
-        strncpy(g_entries[g_count].key, p, klen);
+        memcpy(g_entries[g_count].key, p, klen);
         g_entries[g_count].key[klen] = '\0';
 
         const char *vstart = eq + 1;
         size_t vlen = nl ? (size_t)(nl - vstart) : strlen(vstart);
         if (vlen >= MAX_VAL) vlen = MAX_VAL - 1;
-        strncpy(g_entries[g_count].val, vstart, vlen);
+        memcpy(g_entries[g_count].val, vstart, vlen);
         g_entries[g_count].val[vlen] = '\0';
         g_count++;
 

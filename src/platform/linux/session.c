@@ -1,6 +1,7 @@
 #include "winafi.h"  // Public API header - include first to avoid conflicts
 #include "session.h"
 #include "device.h"
+#include "device_validate.h"
 #include "iso.h"
 #include "iso_extract.h"
 #include "partition.h"
@@ -118,6 +119,24 @@ static int device_is_block_device(const char *devnode) {
         return 0;
     }
     return S_ISBLK(st.st_mode) ? 1 : 0;
+}
+
+static int build_partition_devnode(const char *device, int partition_number,
+                                   char *out, size_t out_size) {
+    if (!device || !out || out_size == 0 || partition_number < 1) {
+        return -1;
+    }
+
+    const char *base = strrchr(device, '/');
+    base = base ? base + 1 : device;
+    int needs_p = 0;
+    if (strncmp(base, "nvme", 4) == 0 || strncmp(base, "mmcblk", 6) == 0 ||
+        strncmp(base, "loop", 4) == 0) {
+        needs_p = 1;
+    }
+
+    int n = snprintf(out, out_size, "%s%s%d", device, needs_p ? "p" : "", partition_number);
+    return (n < 0 || (size_t)n >= out_size) ? -1 : 0;
 }
 
 /**
@@ -415,16 +434,16 @@ int winafi_session_prepare(winafi_session_t *session) {
     // Log both cached and actual sizes for debugging
     log_info("ISO size check - cached: %lu bytes (%.2f GB), actual: %lu bytes (%.2f GB)",
              session->iso_info.total_size_bytes,
-             session->iso_info.total_size_bytes / (1024.0 * 1024.0 * 1024.0),
+             (double)session->iso_info.total_size_bytes / (1024.0 * 1024.0 * 1024.0),
              actual_iso_size,
-             actual_iso_size / (1024.0 * 1024.0 * 1024.0));
+             (double)actual_iso_size / (1024.0 * 1024.0 * 1024.0));
 
     // Use actual file size for comparison, not cached value
     if (device_capacity < actual_iso_size) {
         log_error("Device too small: %lu < %lu (ISO size)", device_capacity, actual_iso_size);
         log_error("ISO: %.2f GB, Device: %.2f GB",
-                  actual_iso_size / (1024.0 * 1024.0 * 1024.0),
-                  device_capacity / (1024.0 * 1024.0 * 1024.0));
+                  (double)actual_iso_size / (1024.0 * 1024.0 * 1024.0),
+                  (double)device_capacity / (1024.0 * 1024.0 * 1024.0));
         session_set_error(session, "E-00-C", "USB capacity insufficient");
         return -1;
     }
@@ -454,6 +473,14 @@ int winafi_session_execute(winafi_session_t *session) {
 
     session->current_state = WINAFI_SESSION_EXECUTING;
 
+    if (device_validate(session->selected_device) != 0 ||
+        validate_device_is_removable(session->selected_device) != VALIDATE_OK ||
+        validate_not_system_drive(session->selected_device) == VALIDATE_ERR_SYSTEM_DRIVE) {
+        log_error("Device failed final safety validation before wipe: %s", session->selected_device);
+        session_set_error(session, "E-00-G", "Device failed final safety validation");
+        goto error;
+    }
+
     // Step 1: Wipe device partition table (0%)
     progress_fire(&session->progress_ctx, 0, "Wiping device");
     log_info("Step 1: Wiping device %s", session->selected_device);
@@ -474,10 +501,14 @@ int winafi_session_execute(winafi_session_t *session) {
         goto error;
     }
 
-    // Build partition device paths (e.g., /dev/sdb1, /dev/sdb2)
+    // Build partition device paths (e.g., /dev/sdb1, /dev/nvme0n1p1)
     char fat_device[128], ntfs_device[128];
-    snprintf(fat_device, sizeof(fat_device), "%s1", session->selected_device);
-    snprintf(ntfs_device, sizeof(ntfs_device), "%s2", session->selected_device);
+    if (build_partition_devnode(session->selected_device, 1, fat_device, sizeof(fat_device)) != 0 ||
+        build_partition_devnode(session->selected_device, 2, ntfs_device, sizeof(ntfs_device)) != 0) {
+        log_error("Failed to build partition device paths for %s", session->selected_device);
+        session_set_error(session, "E-00-A", "Cannot determine partition device paths");
+        goto error;
+    }
 
     uint64_t boot_size_bytes = 100 * 1024 * 1024;  // 100MB FAT32 boot partition
 
@@ -489,6 +520,13 @@ int winafi_session_execute(winafi_session_t *session) {
         log_error("%s", "Failed to create partitions");
         session_set_error(session, "E-20-A", "Cannot create partition table");
         goto error;
+    }
+
+    for (int i = 0; i < 5; i++) {
+        if (access(fat_device, F_OK) == 0 && access(ntfs_device, F_OK) == 0) {
+            break;
+        }
+        sleep(1);
     }
 
     progress_fire(&session->progress_ctx, 30, "Formatting partitions");
@@ -561,12 +599,12 @@ int winafi_session_execute(winafi_session_t *session) {
         // Windows-specific boot setup
         log_info("%s", "Setting up Windows boot environment");
 
-        // Apply Windows unattended customization (Feature 1/4/5): requirement
-        // bypasses, offline/local-account options, etc. The autounattend.xml must
-        // live at the boot-media ROOT so Setup's windowsPE pass reads it.
-        if (session->unattend_flags != 0) {
-            log_info("Injecting unattend customization (flags 0x%04x)", session->unattend_flags);
-            char *auto_xml = wue_generate_xml(session->unattend_flags,
+        // Apply Windows unattended customization. Keep the installer USB out of
+        // Windows Setup's install-target list by default using SanPolicy.
+        int effective_unattend_flags = session->unattend_flags | WUE_OFFLINE_DRIVES;
+        if (effective_unattend_flags != 0) {
+            log_info("Injecting unattend customization (flags 0x%04x)", effective_unattend_flags);
+            char *auto_xml = wue_generate_xml(effective_unattend_flags,
                                               session->unattend_username[0] ? session->unattend_username : NULL,
                                               WUE_ARCH_X86_64);
             if (auto_xml) {
@@ -603,16 +641,16 @@ int winafi_session_execute(winafi_session_t *session) {
         windows_boot_info_t windows_boot_info;
         memset(&windows_boot_info, 0, sizeof(windows_boot_info));
 
-        int ret = detect_windows_version_detailed(session->iso_path, &windows_boot_info);
-        if (ret != ISO_OK) {
-            log_info("Windows boot detection failed: %d", ret);
+        int boot_ret = detect_windows_version_detailed(session->iso_path, &windows_boot_info);
+        if (boot_ret != ISO_OK) {
+            log_info("Windows boot detection failed: %d", boot_ret);
             // Fall through to try generic setup
         } else {
             // Pass progress callback if registered with session
-            ret = setup_windows_boot(session->mount_ctx.ntfs_mount, &windows_boot_info,
-                                     session->filesystem, session->progress_ctx.callback);
-            if (ret != ISO_OK) {
-                log_error("Windows boot setup failed: %d", ret);
+            boot_ret = setup_windows_boot(session->mount_ctx.ntfs_mount, &windows_boot_info,
+                                          session->filesystem, session->progress_ctx.callback);
+            if (boot_ret != ISO_OK) {
+                log_error("Windows boot setup failed: %d", boot_ret);
                 session_set_error(session, "E-40-A", "Cannot setup Windows boot environment");
                 free_windows_boot_info(&windows_boot_info);
                 goto error;
@@ -634,10 +672,10 @@ int winafi_session_execute(winafi_session_t *session) {
         log_info("%s", "Setting up Linux boot environment");
 
         // Mount point is where ISO was extracted; detect bootloader type and setup
-        int ret = setup_linux_boot(session->mount_ctx.ntfs_mount, session->mount_ctx.ntfs_mount,
-                                   NULL, session->filesystem, session->progress_ctx.callback);
-        if (ret != LINUX_BOOT_OK) {
-            log_error("Linux boot setup failed: %d", ret);
+        int linux_ret = setup_linux_boot(session->mount_ctx.ntfs_mount, session->mount_ctx.ntfs_mount,
+                                         NULL, session->filesystem, session->progress_ctx.callback);
+        if (linux_ret != LINUX_BOOT_OK) {
+            log_error("Linux boot setup failed: %d", linux_ret);
             session_set_error(session, "E-40-B", "Cannot setup Linux boot environment");
             goto error;
         }
@@ -755,11 +793,11 @@ const char *winafi_get_detected_os(winafi_session_t *session) {
 /**
  * winafi_get_linux_sb_status - Get Linux Secure Boot status for loaded ISO
  */
-linux_sb_status_t winafi_get_linux_sb_status(winafi_session_t *session) {
+int winafi_get_linux_sb_status(winafi_session_t *session) {
     if (!session) return LINUX_SB_UNKNOWN;
     if (session->iso_info.os_type != ISO_OS_LINUX) return LINUX_SB_UNKNOWN;
     if (session->iso_path[0] == '\0') return LINUX_SB_UNKNOWN;
-    return iso_detect_linux_sb_status(session->iso_path);
+    return (int)iso_detect_linux_sb_status(session->iso_path);
 }
 
 /**

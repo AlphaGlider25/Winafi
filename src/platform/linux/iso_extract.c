@@ -158,7 +158,9 @@ static int validate_iso_path(const char *pathname, const char *mount_point) {
 
     // Construct the target path and validate it doesn't escape mount point
     char target_path[PATH_MAX];
-    snprintf(target_path, sizeof(target_path), "%s/%s", mount_point, pathname);
+    if (snprintf(target_path, sizeof(target_path), "%s/%s", mount_point, pathname) < 0) {
+        return -1;
+    }
 
     // Use realpath to canonicalize - this resolves symlinks and removes .. and .
     char resolved_path[PATH_MAX];
@@ -647,7 +649,8 @@ int iso_detect_os(const char *iso_path, iso_info_t *out_info) {
 
     // Get total ISO size from file stat
     uint64_t file_size = (uint64_t)st.st_size;
-    fprintf(stderr, "[iso_detect_os] file=%s size=%lu bytes (%.2f GB)\n", iso_path, file_size, file_size / (1024.0 * 1024.0 * 1024.0));
+    fprintf(stderr, "[iso_detect_os] file=%s size=%lu bytes (%.2f GB)\n",
+            iso_path, file_size, (double)file_size / (1024.0 * 1024.0 * 1024.0));
 
     // Open ISO file
     struct archive *a = iso_open_archive(iso_path);
@@ -1000,8 +1003,6 @@ int iso_extract_to_mountpoint(const char *iso_path, const char *mount_point,
 
     int error_code = ISO_OK;
     struct archive_entry *entry;
-    int file_count = 0;
-    int dir_created_count = 0;
 
     // Extract files
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
@@ -1040,7 +1041,10 @@ int iso_extract_to_mountpoint(const char *iso_path, const char *mount_point,
 
         // Build target path
         char target_path[PATH_MAX];
-        snprintf(target_path, sizeof(target_path), "%s/%s", mount_point, pathname);
+        if (snprintf(target_path, sizeof(target_path), "%s/%s", mount_point, pathname) < 0) {
+            error_code = ISO_ERR_EXTRACT_FAILED;
+            break;
+        }
 
         // Get file type
         mode_t file_mode = archive_entry_filetype(entry);
@@ -1053,7 +1057,6 @@ int iso_extract_to_mountpoint(const char *iso_path, const char *mount_point,
                 fprintf(stderr, "Failed to create directory: %s\n", target_path);
                 // Don't abort on directory creation failure, continue
             }
-            dir_created_count++;
         } else if (S_ISLNK(file_mode)) {
             // Symlink: create it (with security checks)
             const char *link_target = archive_entry_symlink(entry);
@@ -1081,8 +1084,6 @@ int iso_extract_to_mountpoint(const char *iso_path, const char *mount_point,
                     // Don't abort on symlink failure, continue
                 }
             }
-            file_count++;
-
             // Track the file for cleanup if needed
             extracted_files_list_add(extracted, target_path);
         } else if (S_ISREG(file_mode)) {
@@ -1136,8 +1137,6 @@ int iso_extract_to_mountpoint(const char *iso_path, const char *mount_point,
             if (permissions) {
                 chmod(target_path, permissions);
             }
-
-            file_count++;
 
             // Track the file for cleanup if needed
             extracted_files_list_add(extracted, target_path);

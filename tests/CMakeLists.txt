@@ -71,6 +71,7 @@ if(Qt5_FOUND)
     target_include_directories(test_dark_mode PRIVATE ${CMAKE_SOURCE_DIR}/src)
     set_property(TARGET test_dark_mode PROPERTY AUTOMOC ON)
     add_test(NAME test_dark_mode COMMAND test_dark_mode)
+    set_tests_properties(test_dark_mode PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     # Theme stylesheet generation (headless)
     add_executable(test_theme unit/test_theme.cpp ${CMAKE_SOURCE_DIR}/src/gui/theme/Theme.cpp)

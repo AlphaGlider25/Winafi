@@ -4,6 +4,7 @@ add_library(winafi-core STATIC
     core/progress.c
     core/log.c
     platform/linux/device.c
+    platform/linux/device_validate.c
     platform/linux/partition.c
     platform/linux/mount_ops.c
     platform/linux/fs_ops.c

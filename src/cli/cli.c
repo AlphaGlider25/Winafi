@@ -46,11 +46,11 @@ static void format_size(uint64_t bytes, char *buf, size_t buflen) {
     if (bytes < 1024) {
         snprintf(buf, buflen, "%lu B", bytes);
     } else if (bytes < 1024 * 1024) {
-        snprintf(buf, buflen, "%.1f KB", bytes / 1024.0);
+        snprintf(buf, buflen, "%.1f KB", (double)bytes / 1024.0);
     } else if (bytes < 1024 * 1024 * 1024) {
-        snprintf(buf, buflen, "%.1f MB", bytes / (1024.0 * 1024.0));
+        snprintf(buf, buflen, "%.1f MB", (double)bytes / (1024.0 * 1024.0));
     } else {
-        snprintf(buf, buflen, "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+        snprintf(buf, buflen, "%.1f GB", (double)bytes / (1024.0 * 1024.0 * 1024.0));
     }
 }
 
@@ -412,7 +412,7 @@ int cli_main(int argc, char *argv[]) {
     }
 
     // Prepare session
-    log_info("Preparing session");
+    log_info("%s", "Preparing session");
     if (winafi_session_prepare(session) != 0) {
         fprintf(stderr, "Error: %s\n", winafi_get_error_message(session));
         winafi_session_destroy(session);
@@ -423,7 +423,7 @@ int cli_main(int argc, char *argv[]) {
     winafi_set_progress_callback(session, progress_callback, NULL);
 
     // Execute
-    log_info("Starting write operation");
+    log_info("%s", "Starting write operation");
     printf("\nWriting to USB drive...\n");
     if (winafi_session_execute(session) != 0) {
         const char *error_msg = winafi_get_error_message(session);
@@ -433,7 +433,7 @@ int cli_main(int argc, char *argv[]) {
         log_error("Execution failed: %s", error_msg ? error_msg : "unknown");
 
         // Attempt cleanup on error
-        log_info("Attempting cleanup after error");
+        log_info("%s", "Attempting cleanup after error");
 
         winafi_session_destroy(session);
         return 1;
@@ -441,7 +441,7 @@ int cli_main(int argc, char *argv[]) {
 
     // Success
     printf("\nSuccess! USB drive is ready to boot.\n");
-    log_info("Write operation completed successfully");
+    log_info("%s", "Write operation completed successfully");
 
     winafi_session_destroy(session);
     return 0;

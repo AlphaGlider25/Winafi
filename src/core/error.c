@@ -21,7 +21,7 @@ static int error_count = 0;
 // Helper function to trim trailing whitespace from a string
 static void trim_end(char *str) {
     if (!str) return;
-    int len = strlen(str);
+    size_t len = strlen(str);
     while (len > 0 && isspace(str[len - 1])) {
         str[--len] = '\0';
     }
@@ -58,10 +58,10 @@ int error_init(void) {
             trim_end(code);
             trim_end(message);
 
-            strncpy(error_table[error_count].code, code, MAX_CODE_LEN - 1);
-            error_table[error_count].code[MAX_CODE_LEN - 1] = '\0';
-            strncpy(error_table[error_count].message, message, MAX_MSG_LEN - 1);
-            error_table[error_count].message[MAX_MSG_LEN - 1] = '\0';
+            snprintf(error_table[error_count].code,
+                     sizeof(error_table[error_count].code), "%s", code);
+            snprintf(error_table[error_count].message,
+                     sizeof(error_table[error_count].message), "%s", message);
             error_count++;
         }
     }
@@ -94,7 +94,7 @@ char *error_format(const char *code, const char *context) {
     if (!msg) msg = "Unknown error";
 
     // Safety margin increased to 64 bytes for format string overhead
-    int len = strlen(code) + strlen(msg) + (context ? strlen(context) : 0) + 64;
+    size_t len = strlen(code) + strlen(msg) + (context ? strlen(context) : 0) + 64;
     char *buf = malloc(len);
     if (!buf) {
         // Memory allocation failed, return NULL

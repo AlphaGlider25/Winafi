@@ -98,7 +98,7 @@ static int copy_file(const char *src_path, const char *dest_path) {
     char buffer[4096];
     ssize_t bytes_read;
     while ((bytes_read = read(src_fd, buffer, sizeof(buffer))) > 0) {
-        if (write(dest_fd, buffer, bytes_read) != bytes_read) {
+        if (write(dest_fd, buffer, (size_t)bytes_read) != bytes_read) {
             close(src_fd);
             close(dest_fd);
             return -1;
@@ -133,31 +133,6 @@ static int is_directory(const char *path) {
     return S_ISDIR(st.st_mode);
 }
 
-/**
- * Helper: Check if UEFI Secure Boot is enabled on the system
- *
- * Returns:
- *   1 if system is UEFI-booted (Secure Boot warning should be shown)
- *   0 if system is not UEFI or Secure Boot status cannot be determined
- *  -1 on error
- */
-static int check_secure_boot_enabled(void) {
-    // Simple heuristic: check if system is booted with UEFI
-    // If UEFI is available, we should warn about Secure Boot even if we can't
-    // definitively determine its status (conservative approach)
-
-    // Check for UEFI indicators
-    // /sys/firmware/efi/ exists on UEFI-booted systems
-    if (access("/sys/firmware/efi/fw_platform_size", F_OK) == 0 ||
-        access("/sys/firmware/efi/", F_OK) == 0) {
-        // System is UEFI-booted
-        // Return 1 = warn about Secure Boot (conservative)
-        return 1;
-    }
-
-    // BIOS/Legacy system, no Secure Boot concern
-    return 0;
-}
 
 /**
  * Helper: Read a single line from a file (max length)
@@ -191,8 +166,7 @@ static int read_file_line(const char *path, char *out_line, size_t max_len) {
     }
 
     // Copy to output
-    strncpy(out_line, buffer, max_len - 1);
-    out_line[max_len - 1] = '\0';
+    snprintf(out_line, max_len, "%s", buffer);
 
     return 0;
 }
@@ -220,10 +194,8 @@ static linux_sb_status_t detect_shim_and_efi(const char *iso_extract_path,
 
     /* Check /EFI/BOOT/shimx64.efi first */
     snprintf(candidate, sizeof(candidate), "%s/EFI/BOOT/shimx64.efi", iso_extract_path);
-    if (file_exists(candidate)) {
-        strncpy(shim_path, candidate, shim_size - 1);
-        shim_path[shim_size - 1] = '\0';
-    }
+    if (file_exists(candidate))
+        snprintf(shim_path, shim_size, "%s", candidate);
 
     /* Check distro-specific EFI dirs: /EFI/<distro>/shimx64.efi */
     if (shim_path[0] == '\0') {
@@ -231,8 +203,7 @@ static linux_sb_status_t detect_shim_and_efi(const char *iso_extract_path,
             snprintf(candidate, sizeof(candidate), "%s/EFI/%s/shimx64.efi",
                      iso_extract_path, s_distro_efi_dirs[i]);
             if (file_exists(candidate)) {
-                strncpy(shim_path, candidate, shim_size - 1);
-                shim_path[shim_size - 1] = '\0';
+                snprintf(shim_path, shim_size, "%s", candidate);
                 break;
             }
         }
@@ -240,16 +211,13 @@ static linux_sb_status_t detect_shim_and_efi(const char *iso_extract_path,
 
     /* Locate the primary EFI bootloader (BOOTX64.EFI or grubx64.efi) */
     snprintf(candidate, sizeof(candidate), "%s/EFI/BOOT/BOOTX64.EFI", iso_extract_path);
-    if (file_exists(candidate)) {
-        strncpy(efi_bootloader_path, candidate, efi_size - 1);
-        efi_bootloader_path[efi_size - 1] = '\0';
-    }
+    if (file_exists(candidate))
+        snprintf(efi_bootloader_path, efi_size, "%s", candidate);
+
     if (efi_bootloader_path[0] == '\0') {
         snprintf(candidate, sizeof(candidate), "%s/EFI/BOOT/grubx64.efi", iso_extract_path);
-        if (file_exists(candidate)) {
-            strncpy(efi_bootloader_path, candidate, efi_size - 1);
-            efi_bootloader_path[efi_size - 1] = '\0';
-        }
+        if (file_exists(candidate))
+            snprintf(efi_bootloader_path, efi_size, "%s", candidate);
     }
 
     if (shim_path[0] != '\0') {
@@ -391,8 +359,7 @@ int detect_linux_boot_type(const char *iso_extract_path, linux_boot_info_t *out_
     snprintf(path, sizeof(path), "%s/boot/grub/grub.cfg", iso_extract_path);
     if (file_exists(path)) {
         grub2_found = 1;
-        strncpy(out_info->grub_cfg_path, path, PATH_MAX - 1);
-        out_info->grub_cfg_path[PATH_MAX - 1] = '\0';
+        snprintf(out_info->grub_cfg_path, PATH_MAX, "%s", path);
     }
 
     // Check for Syslinux/ISOLINUX
@@ -402,15 +369,13 @@ int detect_linux_boot_type(const char *iso_extract_path, linux_boot_info_t *out_
     snprintf(path, sizeof(path), "%s/isolinux/isolinux.cfg", iso_extract_path);
     if (file_exists(path)) {
         syslinux_found = 1;
-        strncpy(out_info->syslinux_cfg_path, path, PATH_MAX - 1);
-        out_info->syslinux_cfg_path[PATH_MAX - 1] = '\0';
+        snprintf(out_info->syslinux_cfg_path, PATH_MAX, "%s", path);
         snprintf(syslinux_dir, sizeof(syslinux_dir), "%s/isolinux", iso_extract_path);
     } else {
         snprintf(path, sizeof(path), "%s/syslinux/syslinux.cfg", iso_extract_path);
         if (file_exists(path)) {
             syslinux_found = 1;
-            strncpy(out_info->syslinux_cfg_path, path, PATH_MAX - 1);
-            out_info->syslinux_cfg_path[PATH_MAX - 1] = '\0';
+            snprintf(out_info->syslinux_cfg_path, PATH_MAX, "%s", path);
             snprintf(syslinux_dir, sizeof(syslinux_dir), "%s/syslinux", iso_extract_path);
         }
     }
@@ -419,16 +384,14 @@ int detect_linux_boot_type(const char *iso_extract_path, linux_boot_info_t *out_
     if (syslinux_found) {
         snprintf(path, sizeof(path), "%s/ldlinux.sys", syslinux_dir);
         if (file_exists(path)) {
-            strncpy(out_info->ldlinux_sys_path, path, PATH_MAX - 1);
-            out_info->ldlinux_sys_path[PATH_MAX - 1] = '\0';
+            snprintf(out_info->ldlinux_sys_path, PATH_MAX, "%s", path);
         } else {
             syslinux_found = 0;  // Required file missing
         }
 
         snprintf(path, sizeof(path), "%s/vesamenu.c32", syslinux_dir);
         if (file_exists(path)) {
-            strncpy(out_info->vesamenu_c32_path, path, PATH_MAX - 1);
-            out_info->vesamenu_c32_path[PATH_MAX - 1] = '\0';
+            snprintf(out_info->vesamenu_c32_path, PATH_MAX, "%s", path);
         } else {
             syslinux_found = 0;  // Required file missing
         }
@@ -506,7 +469,7 @@ int setup_grub2_boot(const char *mount_point,
         }
 
         /* Copy shim as BOOTX64.EFI (the UEFI firmware entry point) */
-        char dest_bootx64[PATH_MAX];
+        char dest_bootx64[PATH_MAX + 16];
         snprintf(dest_bootx64, sizeof(dest_bootx64), "%s/BOOTX64.EFI", efi_boot_dir);
         if (copy_file(boot_info->shim_path, dest_bootx64) != 0) {
             fprintf(stderr, "ERROR: Failed to copy shimx64.efi as BOOTX64.EFI\n");
@@ -515,7 +478,7 @@ int setup_grub2_boot(const char *mount_point,
 
         /* Copy grubx64.efi alongside shim so shim can load it */
         if (boot_info->efi_bootloader_path[0] != '\0') {
-            char dest_grub[PATH_MAX];
+            char dest_grub[PATH_MAX + 16];
             snprintf(dest_grub, sizeof(dest_grub), "%s/grubx64.efi", efi_boot_dir);
             if (copy_file(boot_info->efi_bootloader_path, dest_grub) != 0) {
                 /* Non-fatal: GRUB may already be in place from ISO extraction */
@@ -591,7 +554,7 @@ int setup_grub2_boot(const char *mount_point,
                 while ((entry = readdir(dir)) != NULL) {
                     if (entry->d_type == DT_REG && strstr(entry->d_name, ".mod")) {
                         snprintf(path, sizeof(path), "%s/%s", src_modules_dir, entry->d_name);
-                        char dest_path[PATH_MAX];
+                        char dest_path[PATH_MAX + 32];
                         snprintf(dest_path, sizeof(dest_path), "%s/boot/grub/%s/%s",
                                  mount_point, modules_dir, entry->d_name);
 
@@ -622,6 +585,7 @@ int setup_syslinux_boot(const char *mount_point,
                         const linux_boot_info_t *boot_info,
                         int filesystem_type,
                         winafi_progress_callback_t progress_cb) {
+    (void)filesystem_type;
     if (!mount_point || !boot_info) {
         return LINUX_BOOT_ERR_INVALID_PATH;
     }
@@ -639,7 +603,7 @@ int setup_syslinux_boot(const char *mount_point,
         progress_cb(50, "Setting up Syslinux bootloader...", NULL);
     }
 
-    char path[PATH_MAX];
+    char path[PATH_MAX + 32];
 
     // Determine target directory (isolinux or syslinux)
     const char *target_dir = NULL;
@@ -687,8 +651,7 @@ int setup_syslinux_boot(const char *mount_point,
 
     // Copy other Syslinux modules from source directory
     char src_dir[PATH_MAX];
-    strncpy(src_dir, boot_info->ldlinux_sys_path, sizeof(src_dir) - 1);
-    src_dir[sizeof(src_dir) - 1] = '\0';
+    snprintf(src_dir, sizeof(src_dir), "%s", boot_info->ldlinux_sys_path);
     char *last_slash = strrchr(src_dir, '/');
     if (last_slash) {
         *last_slash = '\0';
@@ -703,7 +666,7 @@ int setup_syslinux_boot(const char *mount_point,
                     const char *ext = strrchr(entry->d_name, '.');
                     if (ext && (strcmp(ext, ".c32") == 0 || strcmp(ext, ".menu") == 0)) {
                         snprintf(path, sizeof(path), "%s/%s", src_dir, entry->d_name);
-                        char dest_path[PATH_MAX];
+                        char dest_path[PATH_MAX + 32];
                         snprintf(dest_path, sizeof(dest_path), "%s/%s/%s",
                                  mount_point, target_dir, entry->d_name);
 
